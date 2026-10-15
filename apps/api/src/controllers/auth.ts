@@ -8,6 +8,7 @@ import { sendSuccess } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { env } from '../config/env.js';
 import { mergeGuestCartIntoUserCart } from '../services/cart.service.js';
+import { sendWelcomeEmail } from '../services/notification.service.js';
 import { logger } from '../utils/logger.js';
 import { emailService } from '../services/email.service.js';
 
@@ -74,11 +75,13 @@ export async function verifyOtp(req: Request, res: Response, next: NextFunction)
 
     // Find or create user
     let user = await User.findOne({ email });
+    let isNewUser = false;
     if (!user) {
       user = await User.create({
         email,
         isEmailVerified: true,
       });
+      isNewUser = true;
     } else {
       if (!user.isActive) {
         throw ApiError.forbidden('Your account has been deactivated');
@@ -107,6 +110,11 @@ export async function verifyOtp(req: Request, res: Response, next: NextFunction)
     if (guestId) {
       await mergeGuestCartIntoUserCart(guestId, user.id);
       res.clearCookie('guestId'); // Clear the guest cookie
+    }
+
+    // Send a one-time welcome email for brand new accounts
+    if (isNewUser) {
+      await sendWelcomeEmail(user.email, user.firstName);
     }
 
     sendSuccess({

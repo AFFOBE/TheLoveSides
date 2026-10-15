@@ -4,11 +4,9 @@ import { Link } from 'react-router-dom';
 import Button from '../ui/Button';
 import { useTheme } from '../../context/ThemeContext';
 import { Swiper, SwiperSlide } from 'swiper/react';
-import { Autoplay, EffectFade, Pagination, Navigation } from 'swiper/modules';
+import { Autoplay, Pagination } from 'swiper/modules';
 import 'swiper/css';
-import 'swiper/css/effect-fade';
 import 'swiper/css/pagination';
-import 'swiper/css/navigation';
 
 import HeroImageDesktop from '../../assets/hero1.PNG';
 import HeroImageMobile from '../../assets/images/HeroImage2.jpeg';
@@ -43,9 +41,10 @@ export default function Hero() {
     <section className="relative mt-[85px] md:mt-[136px] lg:mt-[108px] min-h-[calc(100vh-85px)] md:min-h-[calc(100vh-136px)] lg:min-h-[calc(100vh-108px)] flex items-center bg-gray-50">
       <Swiper
         key={JSON.stringify(autoplayOptions)}
-        modules={[Autoplay, EffectFade, Pagination, Navigation]}
-        effect="fade"
-        speed={1000}
+        modules={[Autoplay, Pagination]}
+        effect="slide"
+        direction="horizontal"
+        speed={700}
         autoplay={autoplayOptions}
         pagination={{ clickable: true }}
         loop={slides.length > 1}

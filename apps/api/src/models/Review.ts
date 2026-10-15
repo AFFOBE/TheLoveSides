@@ -9,6 +9,7 @@ export interface IReview extends Document {
   title?: string;
   content?: string;
   images: string[];
+  videos: string[];
   isVerifiedPurchase: boolean;
   status: 'pending' | 'approved' | 'rejected' | 'hidden';
   adminNotes?: string;
@@ -25,6 +26,7 @@ const reviewSchema = new Schema<IReview>(
     title: { type: String, trim: true, maxlength: 200 },
     content: { type: String, trim: true, maxlength: 2000 },
     images: [{ type: String }],
+    videos: [{ type: String }],
     isVerifiedPurchase: { type: Boolean, default: false },
     status: {
       type: String,

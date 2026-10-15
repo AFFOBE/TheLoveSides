@@ -115,9 +115,9 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-6 flex flex-col md:flex-row items-center justify-between text-xs text-ivory/40">
+        <div className="pt-6 relative flex flex-col md:flex-row items-center justify-between text-xs text-ivory/40">
           <p>© 2026 THELOVESIDES. All rights reserved.</p>
-          <p className="mt-2 md:mt-0">
+          <p className="mt-2 md:mt-0 md:absolute md:left-1/2 md:-translate-x-1/2">
             Developed by{' '}
             <a 
               href="https://www.affobe.com/" 

@@ -49,6 +49,7 @@ const envSchema = z.object({
   // Storage
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_FILE_SIZE: z.coerce.number().default(10485760), // 10MB
+  MAX_VIDEO_FILE_SIZE: z.coerce.number().default(52428800), // 50MB (reviews)
 
   // Rate Limiting
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000),

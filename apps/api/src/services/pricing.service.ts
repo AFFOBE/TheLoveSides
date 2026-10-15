@@ -1,7 +1,7 @@
 import { type ICartItem } from '../models/Cart.js';
 import { ProductVariant } from '../models/ProductVariant.js';
 import { Inventory } from '../models/Inventory.js';
-import { Coupon, CouponUsage } from '../models/Coupon.js';
+import { Coupon, CouponUsage, type CouponType } from '../models/Coupon.js';
 import { Order } from '../models/Order.js';
 import { Setting } from '../models/Setting.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -248,6 +248,34 @@ async function calculateCouponDiscount(
 
   // Never discount more than the subtotal
   return Math.min(discount, subtotal);
+}
+
+/**
+ * Validates a coupon against a subtotal and returns a display-friendly preview.
+ * Throws an ApiError if the coupon is invalid/expired/not applicable.
+ */
+export async function previewCoupon(
+  code: string,
+  subtotal: number,
+  userId?: string,
+): Promise<{ code: string; type: CouponType; value: number; discountAmount: number }> {
+  const discountAmount = await calculateCouponDiscount(code, subtotal, userId);
+
+  const coupon = await Coupon.findOne({
+    code: code.toUpperCase(),
+    isActive: true,
+  }).lean();
+
+  if (!coupon) {
+    throw ApiError.badRequest('Invalid coupon code', 'INVALID_COUPON');
+  }
+
+  return {
+    code: coupon.code,
+    type: coupon.type,
+    value: coupon.value,
+    discountAmount,
+  };
 }
 
 /**

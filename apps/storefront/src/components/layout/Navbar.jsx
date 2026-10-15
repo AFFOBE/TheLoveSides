@@ -35,6 +35,8 @@ export default function Navbar() {
   const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const dropdownTimerRef = useRef(null);
 
   useEffect(() => {
     if (state.totalCount > 0) {
@@ -52,6 +54,22 @@ export default function Navbar() {
       setSearchResults([]);
     }
   }, [isSearchOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
+    };
+  }, []);
+
+  const openNavDropdown = (key) => {
+    if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
+    setOpenDropdown(key);
+  };
+
+  const closeNavDropdown = () => {
+    if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
+    dropdownTimerRef.current = setTimeout(() => setOpenDropdown(null), 200);
+  };
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -184,7 +202,6 @@ export default function Navbar() {
                                   <h4 className="text-sm font-serif text-charcoal truncate">
                                     {highlightMatch(product.name, searchQuery)}
                                   </h4>
-                                  <p className="text-xs text-charcoal/60 font-sans mt-0.5">DEBUG: {JSON.stringify(product.variants?.map(v => v.price) || 'no-variants')}</p>
                                   <p className="text-xs text-charcoal/60 font-sans mt-0.5">₹{Number(product.price || product.variants?.[0]?.price || 0).toLocaleString('en-IN')}</p>
                                 </div>
                               </Link>
@@ -274,45 +291,74 @@ export default function Navbar() {
         {/* ROW 3: Categories (Desktop Only) */}
         <div className="hidden md:flex w-full md:py-3 lg:py-2 border-b border-charcoal/10 bg-cream relative">
           <nav className="max-w-7xl mx-auto px-4 md:px-6 lg:px-10 flex flex-wrap justify-start xl:justify-center gap-6 lg:gap-8 xl:gap-10 w-full overflow-visible">
-            {(navbarLinks || []).map((link) => (
-              <div key={link.title} className="group py-2">
-                <Link
-                  to={link.href}
-                  className="text-xs lg:text-sm font-medium tracking-wider uppercase text-charcoal hover:text-pink-primary relative after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-0 after:h-[2px] after:bg-pink-primary hover:after:w-full after:transition-all after:duration-300 whitespace-nowrap shrink-0 inline-block"
+            {(navbarLinks || []).map((link) => {
+              const viewAllHref =
+                link.href && link.href !== '#'
+                  ? link.href
+                  : `/products?q=${encodeURIComponent(link.title)}`;
+              const isOpen = openDropdown === link.title;
+
+              return (
+                <div
+                  key={link.title}
+                  className="py-2"
+                  onMouseEnter={() => openNavDropdown(link.title)}
+                  onMouseLeave={closeNavDropdown}
                 >
-                  {link.title}
-                </Link>
-                {link.subLinks && link.subLinks.length > 0 && (
-                  <div className="absolute top-full left-0 w-full pt-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[60]">
-                    <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-10 pb-4">
-                      <div className="bg-white/95 backdrop-blur-md shadow-2xl shadow-charcoal/5 border border-charcoal/10 rounded-2xl p-8 flex transform origin-top -translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                        <div className="w-1/4 pr-8 border-r border-charcoal/10 flex flex-col justify-center">
-                          <h3 className="text-xl font-serif text-charcoal mb-3">{link.title}</h3>
-                          <p className="text-sm text-charcoal/60 leading-relaxed">
-                            Explore our curated selection of {link.title.toLowerCase()}.
-                          </p>
-                          <Link to={link.href} className="mt-4 text-sm font-medium text-pink-primary hover:text-pink-primary/80 transition-colors uppercase tracking-wider">
-                            View All &rarr;
-                          </Link>
-                        </div>
-                        <div className="w-3/4 pl-8 columns-1 sm:columns-2 lg:columns-3 gap-8">
-                          {link.subLinks.map(subLink => (
+                  <Link
+                    to={viewAllHref}
+                    onClick={() => setOpenDropdown(null)}
+                    className="text-xs lg:text-sm font-medium tracking-wider uppercase text-charcoal hover:text-pink-primary relative after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-0 after:h-[2px] after:bg-pink-primary hover:after:w-full after:transition-all after:duration-300 whitespace-nowrap shrink-0 inline-block"
+                  >
+                    {link.title}
+                  </Link>
+                  {link.subLinks && link.subLinks.length > 0 && (
+                    <div
+                      className={clsx(
+                        'absolute top-full left-0 w-full pt-1 transition-all duration-300 z-[60]',
+                        isOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
+                      )}
+                    >
+                      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-10 pb-4">
+                        <div
+                          className={clsx(
+                            'bg-white/95 backdrop-blur-md shadow-2xl shadow-charcoal/5 border border-charcoal/10 rounded-2xl p-8 flex transform origin-top transition-transform duration-300',
+                            isOpen ? 'translate-y-0' : '-translate-y-2'
+                          )}
+                        >
+                          <div className="w-1/4 pr-8 border-r border-charcoal/10 flex flex-col justify-center">
+                            <h3 className="text-xl font-serif text-charcoal mb-3">{link.title}</h3>
+                            <p className="text-sm text-charcoal/60 leading-relaxed">
+                              Explore our curated selection of {link.title.toLowerCase()}.
+                            </p>
                             <Link
-                              key={subLink.name}
-                              to={subLink.href}
-                              className="text-sm font-medium text-charcoal/80 hover:text-pink-primary transition-colors flex items-center gap-2 group/link break-inside-avoid mb-4"
+                              to={viewAllHref}
+                              onClick={() => setOpenDropdown(null)}
+                              className="mt-4 text-sm font-medium text-pink-primary hover:text-pink-primary/80 transition-colors uppercase tracking-wider"
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-pink-primary/0 group-hover/link:bg-pink-primary transition-colors"></span>
-                              {subLink.name}
+                              View All &rarr;
                             </Link>
-                          ))}
+                          </div>
+                          <div className="w-3/4 pl-8 columns-1 sm:columns-2 lg:columns-3 gap-8">
+                            {link.subLinks.map(subLink => (
+                              <Link
+                                key={subLink.name}
+                                to={subLink.href}
+                                onClick={() => setOpenDropdown(null)}
+                                className="text-sm font-medium text-charcoal/80 hover:text-pink-primary transition-colors flex items-center gap-2 group/link break-inside-avoid mb-4"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-pink-primary/0 group-hover/link:bg-pink-primary transition-colors"></span>
+                                {subLink.name}
+                              </Link>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </nav>
         </div>
       </header>

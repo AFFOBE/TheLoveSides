@@ -1,7 +1,12 @@
 import axios from 'axios';
 
 // Vite env variables start with VITE_
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// In dev, always call the API through the Vite proxy (same-origin) so that
+// session cookies (guest cart) are not blocked by the browser's cross-site
+// cookie policy. In production the absolute URL is used.
+const API_URL = import.meta.env.DEV
+  ? '/api/v1'
+  : (import.meta.env.VITE_API_URL || 'http://localhost:3000/api');
 
 export const api = axios.create({
   baseURL: API_URL,

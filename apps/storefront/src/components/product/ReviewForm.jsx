@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../../lib/api';
 import Button from '../ui/Button';
-import { Star, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Star, X, Loader2, Video } from 'lucide-react';
 
 export default function ReviewForm({ productId, onSubmitSuccess }) {
   const [rating, setRating] = useState(5);
@@ -9,6 +9,7 @@ export default function ReviewForm({ productId, onSubmitSuccess }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [images, setImages] = useState([]);
+  const [videos, setVideos] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +22,8 @@ export default function ReviewForm({ productId, onSubmitSuccess }) {
     setError('');
 
     try {
-      const uploadedUrls = [];
+      const newImages = [];
+      const newVideos = [];
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
@@ -29,13 +31,19 @@ export default function ReviewForm({ productId, onSubmitSuccess }) {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         if (res.data?.url) {
-          uploadedUrls.push(res.data.url);
+          const mimetype = res.data.mimetype || '';
+          if (mimetype.startsWith('video/')) {
+            newVideos.push(res.data.url);
+          } else {
+            newImages.push(res.data.url);
+          }
         }
       }
-      setImages(prev => [...prev, ...uploadedUrls]);
+      if (newImages.length) setImages(prev => [...prev, ...newImages]);
+      if (newVideos.length) setVideos(prev => [...prev, ...newVideos]);
     } catch (err) {
-      console.error('Image upload failed', err);
-      setError('Failed to upload image. Please try again.');
+      console.error('Media upload failed', err);
+      setError('Failed to upload file. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -43,6 +51,10 @@ export default function ReviewForm({ productId, onSubmitSuccess }) {
 
   const removeImage = (indexToRemove) => {
     setImages(prev => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  const removeVideo = (indexToRemove) => {
+    setVideos(prev => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const handleSubmit = async (e) => {
@@ -61,7 +73,8 @@ export default function ReviewForm({ productId, onSubmitSuccess }) {
         rating,
         title,
         content,
-        images
+        images,
+        videos
       });
       onSubmitSuccess();
     } catch (err) {
@@ -126,14 +139,27 @@ export default function ReviewForm({ productId, onSubmitSuccess }) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Attach Photos (Optional)</label>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Attach Photos / Videos (Optional)</label>
         <div className="flex flex-wrap gap-3">
           {images.map((url, idx) => (
-            <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 group">
+            <div key={`img-${idx}`} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 group">
               <img src={url} alt="Upload preview" className="w-full h-full object-cover" />
               <button 
                 type="button" 
                 onClick={() => removeImage(idx)}
+                className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+
+          {videos.map((url, idx) => (
+            <div key={`vid-${idx}`} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 group bg-black">
+              <video src={url} className="w-full h-full object-cover" muted playsInline />
+              <button 
+                type="button" 
+                onClick={() => removeVideo(idx)}
                 className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
               >
                 <X className="w-3 h-3" />
@@ -146,13 +172,13 @@ export default function ReviewForm({ productId, onSubmitSuccess }) {
               <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
             ) : (
               <>
-                <ImageIcon className="w-5 h-5 text-gray-400 mb-1" />
-                <span className="text-[10px] text-gray-500 font-medium">Add Photo</span>
+                <Video className="w-5 h-5 text-gray-400 mb-1" />
+                <span className="text-[10px] text-gray-500 font-medium">Add Photo/Video</span>
               </>
             )}
             <input 
               type="file" 
-              accept="image/*" 
+              accept="image/*,video/mp4,video/webm,video/quicktime" 
               multiple 
               className="hidden" 
               onChange={handleImageUpload}

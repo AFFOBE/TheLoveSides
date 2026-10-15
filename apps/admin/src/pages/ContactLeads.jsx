@@ -17,7 +17,7 @@ export default function ContactLeads() {
   const fetchLeads = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/admin/contact/leads', {
+      const { data } = await api.get('/admin/leads', {
         params: { page: pagination.page, limit: pagination.limit, status: statusFilter }
       });
       setLeads(data.data.leads);
@@ -31,7 +31,7 @@ export default function ContactLeads() {
 
   const handleUpdateStatus = async (id, status) => {
     try {
-      await api.patch(`/admin/contact/leads/${id}/status`, { status });
+      await api.patch(`/admin/leads/${id}/status`, { status });
       if (selectedLead && selectedLead._id === id) {
         setSelectedLead({ ...selectedLead, status });
       }
@@ -44,7 +44,7 @@ export default function ContactLeads() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this lead?')) return;
     try {
-      await api.delete(`/admin/contact/leads/${id}`);
+      await api.delete(`/admin/leads/${id}`);
       if (selectedLead && selectedLead._id === id) setSelectedLead(null);
       setLeads(leads.filter(lead => lead._id !== id));
     } catch (error) {

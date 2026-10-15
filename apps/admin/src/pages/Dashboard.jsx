@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { ShoppingBag, DollarSign, Package, AlertTriangle, ArrowUpRight, TrendingUp, Users, Activity, Loader2 } from 'lucide-react';
+import { ShoppingBag, DollarSign, Package, AlertTriangle, ArrowUpRight, TrendingUp, Users, Activity, Loader2, MessageSquare, Star, Ticket } from 'lucide-react';
 import {
   AreaChart,
   Area,
@@ -19,34 +19,50 @@ export default function Dashboard() {
     activeProducts: 0,
     lowStock: 0,
     recentOrders: [],
-    revenueByDay: []
+    revenueByDay: [],
+    customers: 0,
+    leads: 0,
+    reviews: 0,
+    coupons: 0
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [statsRes, ordersRes, productsRes] = await Promise.all([
+        const [statsRes, ordersRes, productsRes, custRes, leadsRes, reviewsRes, couponsRes] = await Promise.allSettled([
           api.get('/admin/dashboard/stats?period=7d'),
           api.get('/admin/orders?limit=6'),
-          api.get('/admin/catalog/products?limit=1000') // Get more products to check stock
+          api.get('/admin/catalog/products?limit=1000'), // Get more products to check stock
+          api.get('/admin/customers?limit=1'),
+          api.get('/admin/leads?limit=1'),
+          api.get('/admin/reviews?limit=1'),
+          api.get('/admin/coupons?limit=1')
         ]);
 
-        const dashboardData = statsRes.data.data;
-        const orders = ordersRes.data.data.orders || [];
-        const products = productsRes.data.data.products || [];
-        
-        // Calculate low stock from products
-        const lowStockCount = products.filter(p => p.stock <= 5 && p.trackInventory).length;
-        const activeProducts = products.filter(p => p.isActive).length;
-        
+        const dashboardData = statsRes.status === 'fulfilled' ? (statsRes.value.data.data || {}) : {};
+        const orders = ordersRes.status === 'fulfilled' ? (ordersRes.value.data.data || []) : [];
+        const products = productsRes.status === 'fulfilled' ? (productsRes.value.data.data || []) : [];
+
+        // Active = published products
+        const activeProducts = products.filter(p => p.status === 'published').length;
+
+        // Low stock = products having at least one tracked variant at/under threshold
+        const lowStockCount = products.filter(p =>
+          (p.variants || []).some(v => v.inventory?.trackInventory && v.inventory.available <= v.inventory.lowStockThreshold)
+        ).length;
+
         setStats({
           totalSales: dashboardData.revenue || 0,
           totalOrders: dashboardData.totalOrders || 0,
           activeProducts: activeProducts,
           lowStock: lowStockCount,
           recentOrders: orders,
-          revenueByDay: dashboardData.revenueByDay || []
+          revenueByDay: dashboardData.revenueByDay || [],
+          customers: custRes.status === 'fulfilled' ? (custRes.value.data.meta?.pagination?.total ?? 0) : 0,
+          leads: leadsRes.status === 'fulfilled' ? (leadsRes.value.data.data?.pagination?.total ?? 0) : 0,
+          reviews: reviewsRes.status === 'fulfilled' ? (reviewsRes.value.data.meta?.pagination?.total ?? 0) : 0,
+          coupons: couponsRes.status === 'fulfilled' ? (couponsRes.value.data.meta?.pagination?.total ?? 0) : 0
         });
       } catch (error) {
         console.error('Failed to fetch dashboard stats', error);
@@ -241,10 +257,49 @@ export default function Dashboard() {
                         <Users className="w-6 h-6" />
                     </div>
                     <div>
-                        <h4 className="font-bold text-gray-900 text-base">New Customers</h4>
-                        <p className="text-sm text-gray-600 mt-1">24 new users registered this week.</p>
+                        <h4 className="font-bold text-gray-900 text-base">Customers</h4>
+                        <p className="text-sm text-gray-600 mt-1">{stats.customers} registered customers.</p>
                         <Link to="/customers" className="text-sm font-semibold text-blue-600 hover:text-blue-700 mt-2.5 inline-flex items-center group-hover:translate-x-1 transition-transform">
                             View customers <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                        </Link>
+                    </div>
+                </div>
+
+                <div className="group bg-gradient-to-br from-emerald-50/50 to-teal-50/50 border border-emerald-100/60 rounded-2xl p-5 flex gap-4 transition-all hover:shadow-md hover:border-emerald-200/80">
+                    <div className="bg-white shadow-sm text-emerald-600 p-3 rounded-xl h-fit border border-emerald-50 group-hover:scale-110 transition-transform">
+                        <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-gray-900 text-base">Contact Leads</h4>
+                        <p className="text-sm text-gray-600 mt-1">{stats.leads} total inquiries received.</p>
+                        <Link to="/contact-leads" className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 mt-2.5 inline-flex items-center group-hover:translate-x-1 transition-transform">
+                            View leads <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                        </Link>
+                    </div>
+                </div>
+
+                <div className="group bg-gradient-to-br from-amber-50/50 to-yellow-50/50 border border-amber-100/60 rounded-2xl p-5 flex gap-4 transition-all hover:shadow-md hover:border-amber-200/80">
+                    <div className="bg-white shadow-sm text-amber-600 p-3 rounded-xl h-fit border border-amber-50 group-hover:scale-110 transition-transform">
+                        <Star className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-gray-900 text-base">Reviews</h4>
+                        <p className="text-sm text-gray-600 mt-1">{stats.reviews} product reviews.</p>
+                        <Link to="/reviews" className="text-sm font-semibold text-amber-600 hover:text-amber-700 mt-2.5 inline-flex items-center group-hover:translate-x-1 transition-transform">
+                            View reviews <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                        </Link>
+                    </div>
+                </div>
+
+                <div className="group bg-gradient-to-br from-violet-50/50 to-purple-50/50 border border-violet-100/60 rounded-2xl p-5 flex gap-4 transition-all hover:shadow-md hover:border-violet-200/80">
+                    <div className="bg-white shadow-sm text-violet-600 p-3 rounded-xl h-fit border border-violet-50 group-hover:scale-110 transition-transform">
+                        <Ticket className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-gray-900 text-base">Coupons</h4>
+                        <p className="text-sm text-gray-600 mt-1">{stats.coupons} active coupons.</p>
+                        <Link to="/coupons" className="text-sm font-semibold text-violet-600 hover:text-violet-700 mt-2.5 inline-flex items-center group-hover:translate-x-1 transition-transform">
+                            View coupons <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
                         </Link>
                     </div>
                 </div>

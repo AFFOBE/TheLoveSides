@@ -156,8 +156,10 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     let sortOptions: any = { createdAt: -1 };
     if (sort === 'price_asc') sortOptions = { 'variants.0.price': 1 }; // Requires aggregation for perfect sorting
     if (sort === 'price_desc') sortOptions = { 'variants.0.price': -1 };
-    
-    // Auto best seller sorting (by highest salesCount)
+    // Sort dropdown "Best Sellers" option sends sort=bestseller_auto
+    if (sort === 'bestseller_auto') sortOptions = { salesCount: -1, createdAt: -1 };
+
+    // Auto best seller sorting (by highest salesCount) — used by homepage widget
     if (req.query.bestseller_auto === 'true') {
       sortOptions = { salesCount: -1, createdAt: -1 };
     }

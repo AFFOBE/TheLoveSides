@@ -14,6 +14,7 @@ import CustomersList from './pages/customers/CustomersList';
 import CustomerDetails from './pages/customers/CustomerDetails';
 import CouponsList from './pages/marketing/CouponsList';
 import CouponForm from './pages/marketing/CouponForm';
+import NewsletterList from './pages/marketing/NewsletterList';
 import CmsPagesList from './pages/content/CmsPagesList';
 import CmsPageForm from './pages/content/CmsPageForm';
 import InventoryList from './pages/inventory/InventoryList';
@@ -78,6 +79,7 @@ function App() {
             <Route path="/coupons" element={<CouponsList />} />
             <Route path="/coupons/new" element={<CouponForm />} />
             <Route path="/coupons/:id" element={<CouponForm />} />
+            <Route path="/newsletter" element={<NewsletterList />} />
             
             {/* Content & Media */}
             <Route path="/cms" element={<CmsPagesList />} />

@@ -11,7 +11,7 @@ export function useProducts(query = {}) {
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        const { data } = await api.get('/catalog/products', { params: query });
+        const { data } = await api.get('/catalog/products', { params: { limit: 100, ...query } });
         if (active) {
           // Transform backend data to match frontend's expected ProductCard schema
           const formatted = (data || []).map(p => ({
@@ -33,6 +33,11 @@ export function useProducts(query = {}) {
             attributes: p.attributes || [],
             variants: p.variants || [],
           }));
+          if (query.sort === 'price_asc') {
+            formatted.sort((a, b) => (a.price || 0) - (b.price || 0));
+          } else if (query.sort === 'price_desc') {
+            formatted.sort((a, b) => (b.price || 0) - (a.price || 0));
+          }
           setProducts(formatted);
         }
       } catch (e) {

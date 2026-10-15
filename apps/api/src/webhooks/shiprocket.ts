@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { WebhookEvent } from '../models/WebhookEvent.js';
 import { Shipment, type ShipmentStatus } from '../models/Shipment.js';
 import { transitionOrderStatus } from '../services/order.service.js';
+import { sendOrderCancelledEmail } from '../services/notification.service.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
@@ -249,6 +250,11 @@ async function processShiprocketWebhook(payload: any): Promise<void> {
     await Shipment.findByIdAndUpdate(shipment._id, { ...updateData, $push: pushData });
   } else {
     await Shipment.findByIdAndUpdate(shipment._id, updateData);
+  }
+
+  // Notify the customer if the shipment was cancelled by the courier
+  if (newShipmentStatus === 'CANCELLED') {
+    await sendOrderCancelledEmail(shipment.orderId.toString(), 'Shipment cancelled by courier');
   }
 
   // Attempt to transition the order status

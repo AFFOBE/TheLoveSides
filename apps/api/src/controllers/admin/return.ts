@@ -8,6 +8,7 @@ import { createReturnOrder } from '../../integrations/shiprocket/shiprocket.serv
 import { sendSuccess, sendPaginated } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { createAuditLog } from '../../services/audit.service.js';
+import { sendReturnStatusEmail } from '../../services/notification.service.js';
 import { logger } from '../../utils/logger.js';
 
 export async function listReturns(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -82,6 +83,24 @@ export async function updateReturnStatus(req: Request, res: Response, next: Next
     }
 
     await returnRequest.save();
+
+    // Notify the customer about meaningful return/replacement status changes
+    if (['APPROVED', 'REJECTED', 'REFUNDED'].includes(status)) {
+      try {
+        const order = await Order.findById(returnRequest.orderId).select('orderNumber').lean();
+        const user = await User.findById(returnRequest.userId).select('email').lean();
+        if (user?.email && order?.orderNumber) {
+          await sendReturnStatusEmail({
+            email: user.email,
+            orderNumber: order.orderNumber,
+            status,
+            type: returnRequest.type,
+          });
+        }
+      } catch (emailError) {
+        logger.error({ err: emailError, returnId: id }, 'Return status email failed');
+      }
+    }
 
     // When approved, automatically create a return order in Shiprocket
     if (status === 'APPROVED' && isShiprocketConfigured) {

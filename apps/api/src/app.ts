@@ -33,6 +33,8 @@ import pagesRouter from './routes/pages.js';
 import shippingRouter from './routes/shipping.js';
 import contactRouter from './routes/contact.js';
 import adminContactRouter from './routes/admin/contact.js';
+import newsletterRouter from './routes/newsletter.js';
+import adminNewsletterRouter from './routes/admin/newsletter.js';
 
 export const app = express();
 
@@ -101,6 +103,7 @@ app.use('/api/v1/settings', settingsRouter);
 app.use('/api/v1/pages', pagesRouter);
 app.use('/api/v1/shipping', shippingRouter);
 app.use('/api/v1/contact', contactRouter);
+app.use('/api/v1/newsletter', newsletterRouter);
 app.use('/api/v1/admin/catalog', adminCatalogRouter);
 app.use('/api/v1/admin/inventory', adminInventoryRouter);
 app.use('/api/v1/admin/upload', adminUploadRouter);
@@ -110,6 +113,7 @@ app.use('/api/v1/admin', adminOrdersRouter);
 app.use('/api/v1/admin/returns', adminReturnsRouter);
 app.use('/api/v1/admin', adminShippingRouter);
 app.use('/api/v1/admin', adminContactRouter);
+app.use('/api/v1/admin', adminNewsletterRouter);
 
 // Global Error Handler (must be last)
 app.use(errorHandler);

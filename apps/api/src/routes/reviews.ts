@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticateCustomer } from '../middleware/auth.js';
 import { submitReview, getProductReviews, checkHasReviewed } from '../controllers/public/review.js';
-import { uploadService } from '../services/storage.service.js';
+import { reviewUploadService } from '../services/storage.service.js';
 import { uploadSingle } from '../controllers/admin/upload.js';
 
 const router = Router();
@@ -16,6 +16,6 @@ router.get('/:productId', getProductReviews);
 router.post('/', authenticateCustomer, submitReview);
 
 // Protected route for uploading review images
-router.post('/upload', authenticateCustomer, uploadService.single('file'), uploadSingle);
+router.post('/upload', authenticateCustomer, reviewUploadService.single('file'), uploadSingle);
 
 export default router;

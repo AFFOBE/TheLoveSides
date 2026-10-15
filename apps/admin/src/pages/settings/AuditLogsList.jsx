@@ -12,7 +12,7 @@ export default function AuditLogsList() {
 
   const fetchLogs = async () => {
     try {
-      const { data } = await api.get('/admin/audit'); 
+      const { data } = await api.get('/admin/audit-logs'); 
       setLogs(data.data?.data || data.data || []);
     } catch (error) {
       console.error('Failed to fetch audit logs', error);

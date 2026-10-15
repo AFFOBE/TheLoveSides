@@ -43,6 +43,8 @@ function handleRateLimitExceeded(req: Request, next: NextFunction, rlRes: RateLi
 // Middlewares
 // ---------------------------------------------------------------------------
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 export async function rateLimitGeneral(req: Request, _res: Response, next: NextFunction) {
   try {
     // Bypass general rate limit for requests with an admin token
@@ -50,8 +52,14 @@ export async function rateLimitGeneral(req: Request, _res: Response, next: NextF
       return next();
     }
 
+    // Safe read methods get a much higher ceiling so normal browsing (which
+    // fires many requests per page load) doesn't get blocked.
+    const isRead = SAFE_METHODS.has(req.method);
+    const name = isRead ? 'general:read' : 'general';
+    const config = isRead ? RateLimitConfig.GENERAL_READ : RateLimitConfig.GENERAL;
+
     const key = getClientIp(req);
-    await getLimiter('general', RateLimitConfig.GENERAL).consume(key);
+    await getLimiter(name, config).consume(key);
     next();
   } catch (rejRes) {
     if (rejRes instanceof Error) return next(rejRes);

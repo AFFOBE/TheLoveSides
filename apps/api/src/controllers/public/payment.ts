@@ -4,6 +4,8 @@ import { Payment } from '../../models/Payment.js';
 import { Cart } from '../../models/Cart.js';
 import { createPaymentOrder, verifyPaymentSignature } from '../../integrations/razorpay/razorpay.service.js';
 import { transitionOrderStatus } from '../../services/order.service.js';
+import { sendOrderConfirmationEmail } from '../../services/invoice.service.js';
+import { User } from '../../models/User.js';
 import { sendSuccess } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../../utils/logger.js';
@@ -106,6 +108,16 @@ export async function verifyPayment(req: Request, res: Response, next: NextFunct
       'Payment successful, order confirmed',
       order.userId.toString()
     );
+
+    // Send order confirmation email with invoice (non-blocking)
+    try {
+      const user = await User.findById(order.userId);
+      if (user?.email) {
+        await sendOrderConfirmationEmail(order.id, user.email);
+      }
+    } catch (err) {
+      logger.error({ err, orderId: order.id }, 'Error sending order confirmation email');
+    }
 
     // Clear the cart since checkout is successful
     if (req.cartOwner) {

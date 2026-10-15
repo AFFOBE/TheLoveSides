@@ -1,23 +1,29 @@
 import React, { useState } from 'react';
 import Button from '../ui/Button';
+import { api } from '../../lib/api';
 
 export default function NewsletterCTA() {
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState('idle'); // idle, error, success
+  const [status, setStatus] = useState('idle'); // idle, error, loading, success
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setStatus('error');
       return;
     }
-    
-    // Simulate API call
-    setStatus('success');
-    setEmail('');
-    setTimeout(() => {
-      setStatus('idle');
-    }, 3000);
+
+    setStatus('loading');
+    try {
+      await api.post('/newsletter/subscribe', { email, source: 'footer' });
+      setStatus('success');
+      setEmail('');
+      setTimeout(() => {
+        setStatus('idle');
+      }, 3000);
+    } catch {
+      setStatus('error');
+    }
   };
 
   return (
@@ -45,8 +51,8 @@ export default function NewsletterCTA() {
             <p className="absolute -bottom-5 left-0 text-xs text-green-400">Subscribed successfully!</p>
           )}
         </div>
-        <Button type="submit" variant="primary" className="py-2.5 px-5 h-auto self-start">
-          Join
+        <Button type="submit" variant="primary" disabled={status === 'loading'} className="py-2.5 px-5 h-auto self-start">
+          {status === 'loading' ? '...' : 'Join'}
         </Button>
       </form>
     </div>

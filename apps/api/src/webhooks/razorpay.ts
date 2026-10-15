@@ -5,6 +5,7 @@ import { Order } from '../models/Order.js';
 import { Payment } from '../models/Payment.js';
 import { transitionOrderStatus } from '../services/order.service.js';
 import { sendOrderConfirmationEmail } from '../services/invoice.service.js';
+import { sendRefundProcessedEmail } from '../services/notification.service.js';
 import { User } from '../models/User.js';
 import { logger } from '../utils/logger.js';
 
@@ -144,7 +145,21 @@ async function processRazorpayEvent(event: any) {
       break;
     }
     case 'refund.processed': {
-      // Process refund updates if needed
+      const refundEntity = payload.refund?.entity;
+      if (!refundEntity) break;
+
+      let orderId: string | undefined = refundEntity.notes?.orderId;
+      if (!orderId && refundEntity.payment_id) {
+        const payment = await Payment.findOne({ razorpayPaymentId: refundEntity.payment_id }).lean();
+        orderId = payment?.orderId?.toString();
+      }
+
+      if (orderId) {
+        const refundAmount = refundEntity.amount ? refundEntity.amount / 100 : undefined;
+        await sendRefundProcessedEmail(orderId, refundAmount);
+      } else {
+        logger.warn({ refundId: refundEntity.id }, 'Refund webhook: could not resolve order');
+      }
       break;
     }
     default:

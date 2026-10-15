@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
-import { Check, X, Eye } from 'lucide-react';
+import { Check, X, Eye, Film } from 'lucide-react';
 
 export default function ReviewsList() {
   const [reviews, setReviews] = useState([]);
@@ -47,6 +47,7 @@ export default function ReviewsList() {
                 <th className="p-4 font-medium">User</th>
                 <th className="p-4 font-medium">Rating</th>
                 <th className="p-4 font-medium">Comment</th>
+                <th className="p-4 font-medium">Media</th>
                 <th className="p-4 font-medium">Status</th>
                 <th className="p-4 font-medium text-right">Actions</th>
               </tr>
@@ -73,6 +74,30 @@ export default function ReviewsList() {
                   <td className="p-4">
                     <p className="text-sm font-medium text-charcoal">{review.title}</p>
                     <p className="text-sm text-charcoal/70 line-clamp-2">{review.content}</p>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(review.images || []).slice(0, 3).map((src, i) => (
+                        <a key={`img-${i}`} href={src} target="_blank" rel="noopener noreferrer" title="View image">
+                          <img src={src} alt="review" className="w-10 h-10 object-cover rounded-md border border-charcoal/10" />
+                        </a>
+                      ))}
+                      {(review.videos || []).slice(0, 1).map((src, i) => (
+                        <a
+                          key={`vid-${i}`}
+                          href={src}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="View video"
+                          className="w-10 h-10 flex items-center justify-center rounded-md border border-charcoal/10 bg-ivory text-charcoal/60 hover:text-charcoal transition-colors"
+                        >
+                          <Film className="w-4 h-4" />
+                        </a>
+                      ))}
+                      {(!review.images?.length && !review.videos?.length) && (
+                        <span className="text-xs text-charcoal/30">—</span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-4">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
@@ -109,7 +134,7 @@ export default function ReviewsList() {
               ))}
               {reviews.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="p-8 text-center text-charcoal/50 text-sm">
+                  <td colSpan="7" className="p-8 text-center text-charcoal/50 text-sm">
                     No reviews found.
                   </td>
                 </tr>

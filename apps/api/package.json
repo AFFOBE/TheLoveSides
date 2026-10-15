@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src/",
     "seed": "tsx scripts/seed.ts",
+    "seed:store": "tsx scripts/seed-store.ts",
     "create-admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {

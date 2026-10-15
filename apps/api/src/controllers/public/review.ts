@@ -29,7 +29,7 @@ export async function checkHasReviewed(req: Request, res: Response, next: NextFu
 
 export async function submitReview(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { productId, rating, title, content, images } = req.body;
+    const { productId, rating, title, content, images, videos } = req.body;
 
     // Validate that the user actually purchased the product
     const hasPurchased = await Order.exists({
@@ -57,6 +57,7 @@ export async function submitReview(req: Request, res: Response, next: NextFuncti
       title,
       content,
       images: images || [],
+      videos: videos || [],
       isVerifiedPurchase,
       status: 'pending', // Needs admin approval to show up
     });

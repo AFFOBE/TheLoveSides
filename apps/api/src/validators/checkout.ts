@@ -25,3 +25,7 @@ export const initiateCheckoutSchema = z.object({
     rate: z.number()
   }).nullable().optional(),
 });
+
+export const validateCouponSchema = z.object({
+  couponCode: z.string().trim().min(1, 'Coupon code is required').toUpperCase(),
+});

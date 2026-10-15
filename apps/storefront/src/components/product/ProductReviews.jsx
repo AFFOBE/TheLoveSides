@@ -143,6 +143,21 @@ function ReviewItem({ review }) {
         {review.content}
       </p>
       
+      {/* Review Videos */}
+      {review.videos && review.videos.length > 0 && (
+        <div className="flex flex-wrap gap-3 mt-4">
+          {review.videos.map((video, idx) => (
+            <video
+              key={`video-${idx}`}
+              src={video}
+              controls
+              playsInline
+              className="w-40 h-40 rounded-lg border border-gray-200 bg-black object-cover"
+            />
+          ))}
+        </div>
+      )}
+
       {/* Review Images */}
       {review.images && review.images.length > 0 && (
         <div className="flex flex-wrap gap-3 mt-4">

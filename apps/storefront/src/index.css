@@ -35,3 +35,18 @@
     @apply !bg-pink-primary !w-6 !rounded-full;
   }
 }
+
+/* Instagram embeds inside the social feed: force them to fit the card
+   width so captions are never clipped (Instagram sets a 326px min-width). */
+#social-feed .instagram-media,
+#social-feed .instagram-media iframe {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  border-radius: 12px !important;
+}
+#social-feed .instagram-media {
+  background: #fff !important;
+  border: 0 !important;
+}

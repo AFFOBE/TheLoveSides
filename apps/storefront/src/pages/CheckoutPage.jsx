@@ -13,6 +13,10 @@ export default function CheckoutPage() {
   const { shipping, contactInfo } = useTheme();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState('');
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     firstName: '',
@@ -254,9 +258,43 @@ export default function CheckoutPage() {
     }
   }, [state.items, state.loading, navigate]);
 
+  // Clear an applied coupon if the cart contents (subtotal) change
+  useEffect(() => {
+    setAppliedCoupon(null);
+    setCouponError('');
+  }, [state.subtotal]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim();
+    if (!code) return;
+    setApplyingCoupon(true);
+    setCouponError('');
+    try {
+      const { data } = await api.post('/checkout/validate-coupon', { couponCode: code }, { withCredentials: true });
+      setAppliedCoupon({
+        code: data.code,
+        discountAmount: data.discountAmount,
+        type: data.type,
+        value: data.value,
+      });
+      setCouponInput('');
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(err.response?.data?.error?.message || 'Invalid coupon code');
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError('');
+    setCouponInput('');
   };
 
   const getWhatsAppMessage = () => {
@@ -301,6 +339,7 @@ ${itemsList}`;
         email: formData.email,
         shippingAddress,
         billingAddress: shippingAddress,
+        couponCode: appliedCoupon?.code || undefined,
         shippingMethod: selectedRate ? {
           courierId: selectedRate.courierId,
           courierName: selectedRate.courierName,
@@ -574,6 +613,52 @@ ${itemsList}`;
                 </div>
               )}
 
+              {/* Coupon */}
+              <div className="bg-white p-6 md:p-8 rounded-2xl border border-charcoal/5 shadow-sm">
+                <h2 className="font-serif text-xl text-charcoal mb-4">Coupon</h2>
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-sans text-sm font-semibold text-green-700">{appliedCoupon.code}</span>
+                      <span className="font-sans text-xs text-green-600">
+                        applied{appliedCoupon.type === 'percentage' ? ` (${appliedCoupon.value}% off)` : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoupon}
+                      className="text-xs font-sans text-charcoal/60 hover:text-red-500 underline transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <label htmlFor="coupon" className="block text-sm font-sans text-charcoal/80 mb-1">Have a coupon code?</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        id="coupon"
+                        value={couponInput}
+                        onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                        placeholder="Enter code"
+                        className="flex-1 min-w-0 px-4 py-3 rounded-xl border-2 border-charcoal/10 focus:outline-none focus:border-pink-primary focus:ring-4 focus:ring-pink-primary/10 font-sans text-charcoal transition-all duration-300 hover:border-charcoal/20 uppercase"
+                      />
+                      <Button
+                        type="button"
+                        variant="dark"
+                        onClick={handleApplyCoupon}
+                        disabled={applyingCoupon || !couponInput.trim()}
+                        className="px-5 whitespace-nowrap"
+                      >
+                        {applyingCoupon ? 'Applying...' : 'Apply'}
+                      </Button>
+                    </div>
+                    {couponError && <p className="text-xs text-red-500 font-sans mt-2">{couponError}</p>}
+                  </div>
+                )}
+              </div>
+
               <Button type="submit" variant="dark" className="w-full py-4 text-lg shadow-lg" disabled={loading || !selectedRate}>
                 {loading ? 'Processing...' : 'Pay Now'}
               </Button>
@@ -622,11 +707,17 @@ ${itemsList}`;
                   <span>Taxes (included)</span>
                   <span>₹0</span>
                 </div>
+                {appliedCoupon && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount ({appliedCoupon.code})</span>
+                    <span>-₹{Number(appliedCoupon.discountAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-charcoal/10 mt-4 pt-4 flex justify-between font-serif text-xl text-charcoal">
                 <span>Total</span>
-                <span>₹{Number(state.subtotal + finalShippingRate).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                <span>₹{Number(Math.max(0, state.subtotal - (appliedCoupon?.discountAmount || 0) + finalShippingRate)).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           </div>

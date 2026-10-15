@@ -126,7 +126,7 @@ export async function createShiprocketOrder(order: IOrder, userEmail: string, de
     const payload = {
       order_id: order.orderNumber,
       order_date: order.createdAt.toISOString().split('T')[0],
-      pickup_location: 'Primary', // Needs to match Shiprocket dashboard configuration
+      pickup_location: 'warehouse', // Needs to match Shiprocket dashboard configuration
       billing_customer_name: firstName,
       billing_last_name: lastName,
       billing_address: order.billingAddress?.addressLine1 || order.shippingAddress.addressLine1,

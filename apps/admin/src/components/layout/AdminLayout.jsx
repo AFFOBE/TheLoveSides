@@ -27,7 +27,8 @@ import {
   ChevronDown,
   KeyRound,
   MessageSquare,
-  Tag
+  Tag,
+  Mail
 } from 'lucide-react';
 import clsx from 'clsx';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -88,6 +89,7 @@ export default function AdminLayout() {
       label: 'Marketing',
       items: [
         { name: 'Coupons', href: '/coupons', icon: Ticket },
+        { name: 'Newsletter', href: '/newsletter', icon: Mail },
       ]
     },
     {

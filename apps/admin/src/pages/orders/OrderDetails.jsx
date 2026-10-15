@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import { 
   Package, Truck, MapPin, CreditCard, Clock, 
   CheckCircle, XCircle, ArrowLeft, User, Phone, 
-  Calendar, RefreshCw, Box, ChevronDown, Activity, ShieldCheck, FileText
+  Calendar, RefreshCw, Box, ChevronDown, Activity, ShieldCheck, FileText, Ticket
 } from 'lucide-react';
 
 export default function OrderDetails() {
@@ -362,6 +362,15 @@ export default function OrderDetails() {
                   <span className="flex items-center gap-2"><Truck className="w-4 h-4" /> Shipping</span>
                   <span className="font-medium">₹{order.shippingAmount}</span>
                 </div>
+
+                {order.discountAmount > 0 && (
+                  <div className="flex justify-between items-center text-green-600">
+                    <span className="flex items-center gap-2">
+                      <Ticket className="w-4 h-4" /> Discount{order.couponCode ? ` (${order.couponCode})` : ''}
+                    </span>
+                    <span className="font-medium">-₹{order.discountAmount}</span>
+                  </div>
+                )}
                 
                 <div className="pt-4 mt-4 border-t border-dashed border-charcoal/10">
                   <div className="flex justify-between items-center">

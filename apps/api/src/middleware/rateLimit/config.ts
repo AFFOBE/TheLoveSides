@@ -41,4 +41,12 @@ export const RateLimitConfig = {
     DURATION: Math.floor(env.RATE_LIMIT_WINDOW_MS / 1000),
     BLOCK_DURATION: 0,
   },
+  // Reads (GET/HEAD/OPTIONS) happen many times per page load, so they get a
+  // much higher ceiling than writes. This prevents normal browsing from
+  // exhausting the general bucket.
+  GENERAL_READ: {
+    POINTS: Math.max(env.RATE_LIMIT_MAX_REQUESTS, 100) * 10,
+    DURATION: Math.floor(env.RATE_LIMIT_WINDOW_MS / 1000),
+    BLOCK_DURATION: 0,
+  },
 };

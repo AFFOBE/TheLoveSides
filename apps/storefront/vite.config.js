@@ -16,6 +16,15 @@ export default defineConfig({
       avif: { quality: 70 },
     })
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'https://api.thelovesides.com',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       output: {
