@@ -5,6 +5,50 @@ import { sendSuccess, sendPaginated } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 import mongoose from 'mongoose';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
+// Builds an AND-of-tokens search. Each token must match at least one field
+// (name, tags, description, attribute values, or a related room/collection/category/subcategory).
+// This lets combined queries like "red curtains" work even when the color is an
+// attribute and the name lives elsewhere.
+async function buildSearchClauses(q: string): Promise<any[]> {
+  const tokens = q.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  return Promise.all(
+    tokens.map(async (token) => {
+      const regex = new RegExp(escapeRegex(token), 'i');
+
+      const [rooms, collections, categories, subCategories] = await Promise.all([
+        mongoose.model('Room').find({ name: regex }).select('_id').lean(),
+        mongoose.model('Collection').find({ name: regex }).select('_id').lean(),
+        mongoose.model('Category').find({ name: regex }).select('_id').lean(),
+        mongoose.model('SubCategory').find({ name: regex }).select('_id').lean(),
+      ]);
+
+      const roomIds = rooms.map((r: any) => r._id);
+      const collectionIds = collections.map((c: any) => c._id);
+      const categoryIds = categories.map((c: any) => c._id);
+      const subCategoryIds = subCategories.map((c: any) => c._id);
+
+      return {
+        $or: [
+          { name: regex },
+          { tags: regex },
+          { shortDescription: regex },
+          { 'attributes.values': regex },
+          ...(roomIds.length > 0 ? [{ roomIds: { $in: roomIds } }] : []),
+          ...(collectionIds.length > 0 ? [{ collectionIds: { $in: collectionIds } }] : []),
+          ...(categoryIds.length > 0 ? [{ categoryIds: { $in: categoryIds } }] : []),
+          ...(subCategoryIds.length > 0 ? [{ subCategoryIds: { $in: subCategoryIds } }] : []),
+        ],
+      };
+    })
+  );
+}
+
 export async function listProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -19,31 +63,10 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     };
 
     if (q) {
-      const escapedQ = (q as string).replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-      const searchRegex = new RegExp(escapedQ, 'i');
-      
-      const [rooms, collections, categories, subCategories] = await Promise.all([
-        mongoose.model('Room').find({ name: searchRegex }).select('_id').lean(),
-        mongoose.model('Collection').find({ name: searchRegex }).select('_id').lean(),
-        mongoose.model('Category').find({ name: searchRegex }).select('_id').lean(),
-        mongoose.model('SubCategory').find({ name: searchRegex }).select('_id').lean(),
-      ]);
-
-      const matchedRoomIds = rooms.map((r: any) => r._id);
-      const matchedCollectionIds = collections.map((c: any) => c._id);
-      const matchedCategoryIds = categories.map((c: any) => c._id);
-      const matchedSubCategoryIds = subCategories.map((c: any) => c._id);
-
-      query.$or = [
-        { name: searchRegex },
-        { tags: searchRegex },
-        { shortDescription: searchRegex },
-        { 'attributes.values': searchRegex },
-        ...(matchedRoomIds.length > 0 ? [{ roomIds: { $in: matchedRoomIds } }] : []),
-        ...(matchedCollectionIds.length > 0 ? [{ collectionIds: { $in: matchedCollectionIds } }] : []),
-        ...(matchedCategoryIds.length > 0 ? [{ categoryIds: { $in: matchedCategoryIds } }] : []),
-        ...(matchedSubCategoryIds.length > 0 ? [{ subCategoryIds: { $in: matchedSubCategoryIds } }] : []),
-      ];
+      const clauses = await buildSearchClauses(q as string);
+      if (clauses.length > 0) {
+        query.$and = clauses;
+      }
     }
 
     if (req.query.featured === 'true') {
@@ -319,34 +342,16 @@ export async function searchProducts(req: Request, res: Response, next: NextFunc
       return;
     }
 
-    const escapedQ = q.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-    const searchRegex = new RegExp(escapedQ, 'i');
-
-    const [rooms, collections, categories, subCategories] = await Promise.all([
-      mongoose.model('Room').find({ name: searchRegex }).select('_id').lean(),
-      mongoose.model('Collection').find({ name: searchRegex }).select('_id').lean(),
-      mongoose.model('Category').find({ name: searchRegex }).select('_id').lean(),
-      mongoose.model('SubCategory').find({ name: searchRegex }).select('_id').lean(),
-    ]);
-
-    const matchedRoomIds = rooms.map((r: any) => r._id);
-    const matchedCollectionIds = collections.map((c: any) => c._id);
-    const matchedCategoryIds = categories.map((c: any) => c._id);
-    const matchedSubCategoryIds = subCategories.map((c: any) => c._id);
+    const clauses = await buildSearchClauses(q);
+    if (clauses.length === 0) {
+      sendSuccess({ res, data: [] });
+      return;
+    }
 
     const query: any = {
       status: 'published',
       deletedAt: null,
-      $or: [
-        { name: searchRegex },
-        { tags: searchRegex },
-        { shortDescription: searchRegex },
-        { 'attributes.values': searchRegex },
-        ...(matchedRoomIds.length > 0 ? [{ roomIds: { $in: matchedRoomIds } }] : []),
-        ...(matchedCollectionIds.length > 0 ? [{ collectionIds: { $in: matchedCollectionIds } }] : []),
-        ...(matchedCategoryIds.length > 0 ? [{ categoryIds: { $in: matchedCategoryIds } }] : []),
-        ...(matchedSubCategoryIds.length > 0 ? [{ subCategoryIds: { $in: matchedSubCategoryIds } }] : []),
-      ]
+      $and: clauses,
     };
 
     const products = await Product.find(query)
