@@ -19,31 +19,48 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     };
 
     if (q) {
-      const escapedQ = (q as string).replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-      const searchRegex = new RegExp(escapedQ, 'i');
-      
-      const [rooms, collections, categories, subCategories] = await Promise.all([
-        mongoose.model('Room').find({ name: searchRegex }).select('_id').lean(),
-        mongoose.model('Collection').find({ name: searchRegex }).select('_id').lean(),
-        mongoose.model('Category').find({ name: searchRegex }).select('_id').lean(),
-        mongoose.model('SubCategory').find({ name: searchRegex }).select('_id').lean(),
-      ]);
+      const qStr = q as string;
+      const tokens = qStr
+        .trim()
+        .split(/\s+/)
+        .filter((t) => t.length > 0)
+        .map((t) => t.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'));
 
-      const matchedRoomIds = rooms.map((r: any) => r._id);
-      const matchedCollectionIds = collections.map((c: any) => c._id);
-      const matchedCategoryIds = categories.map((c: any) => c._id);
-      const matchedSubCategoryIds = subCategories.map((c: any) => c._id);
-
-      query.$or = [
-        { name: searchRegex },
-        { tags: searchRegex },
-        { shortDescription: searchRegex },
-        { 'attributes.values': searchRegex },
-        ...(matchedRoomIds.length > 0 ? [{ roomIds: { $in: matchedRoomIds } }] : []),
-        ...(matchedCollectionIds.length > 0 ? [{ collectionIds: { $in: matchedCollectionIds } }] : []),
-        ...(matchedCategoryIds.length > 0 ? [{ categoryIds: { $in: matchedCategoryIds } }] : []),
-        ...(matchedSubCategoryIds.length > 0 ? [{ subCategoryIds: { $in: matchedSubCategoryIds } }] : []),
-      ];
+      const productConditions: any[] = [];
+      if (tokens.length > 1) {
+        tokens.forEach((t) => {
+          const regex = new RegExp(t, 'i');
+          productConditions.push({
+            $or: [
+              { name: regex },
+              { tags: regex },
+              { shortDescription: regex },
+              { 'attributes.values': regex },
+            ],
+          });
+        });
+        query.$and = productConditions;
+      } else {
+        const regex = new RegExp(tokens[0], 'i');
+        const orConditions: any[] = [
+          { name: regex },
+          { tags: regex },
+          { shortDescription: regex },
+          { 'attributes.values': regex },
+        ];
+        // Add related entity matches
+        const [rooms, collections, categories, subCategories] = await Promise.all([
+          mongoose.model('Room').find({ name: regex }).select('_id').lean(),
+          mongoose.model('Collection').find({ name: regex }).select('_id').lean(),
+          mongoose.model('Category').find({ name: regex }).select('_id').lean(),
+          mongoose.model('SubCategory').find({ name: regex }).select('_id').lean(),
+        ]);
+        if (rooms.length) orConditions.push({ roomIds: { $in: rooms.map((r: any) => r._id) } });
+        if (collections.length) orConditions.push({ collectionIds: { $in: collections.map((c: any) => c._id) } });
+        if (categories.length) orConditions.push({ categoryIds: { $in: categories.map((c: any) => c._id) } });
+        if (subCategories.length) orConditions.push({ subCategoryIds: { $in: subCategories.map((c: any) => c._id) } });
+        query.$or = orConditions;
+      }
     }
 
     if (req.query.featured === 'true') {
@@ -319,35 +336,56 @@ export async function searchProducts(req: Request, res: Response, next: NextFunc
       return;
     }
 
-    const escapedQ = q.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-    const searchRegex = new RegExp(escapedQ, 'i');
+    const qStr = q as string;
+    const tokens = qStr
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length > 0)
+      .map((t) => t.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'));
 
-    const [rooms, collections, categories, subCategories] = await Promise.all([
-      mongoose.model('Room').find({ name: searchRegex }).select('_id').lean(),
-      mongoose.model('Collection').find({ name: searchRegex }).select('_id').lean(),
-      mongoose.model('Category').find({ name: searchRegex }).select('_id').lean(),
-      mongoose.model('SubCategory').find({ name: searchRegex }).select('_id').lean(),
-    ]);
-
-    const matchedRoomIds = rooms.map((r: any) => r._id);
-    const matchedCollectionIds = collections.map((c: any) => c._id);
-    const matchedCategoryIds = categories.map((c: any) => c._id);
-    const matchedSubCategoryIds = subCategories.map((c: any) => c._id);
-
-    const query: any = {
-      status: 'published',
-      deletedAt: null,
-      $or: [
-        { name: searchRegex },
-        { tags: searchRegex },
-        { shortDescription: searchRegex },
-        { 'attributes.values': searchRegex },
-        ...(matchedRoomIds.length > 0 ? [{ roomIds: { $in: matchedRoomIds } }] : []),
-        ...(matchedCollectionIds.length > 0 ? [{ collectionIds: { $in: matchedCollectionIds } }] : []),
-        ...(matchedCategoryIds.length > 0 ? [{ categoryIds: { $in: matchedCategoryIds } }] : []),
-        ...(matchedSubCategoryIds.length > 0 ? [{ subCategoryIds: { $in: matchedSubCategoryIds } }] : []),
-      ]
-    };
+    let query: any;
+    if (tokens.length > 1) {
+      const andConditions: any[] = [];
+      tokens.forEach((t) => {
+        const regex = new RegExp(t, 'i');
+        andConditions.push({
+          $or: [
+            { name: regex },
+            { tags: regex },
+            { shortDescription: regex },
+            { 'attributes.values': regex },
+          ],
+        });
+      });
+      query = {
+        status: 'published',
+        deletedAt: null,
+        $and: andConditions,
+      };
+    } else {
+      const regex = new RegExp(tokens[0], 'i');
+      const orConditions: any[] = [
+        { name: regex },
+        { tags: regex },
+        { shortDescription: regex },
+        { 'attributes.values': regex },
+      ];
+      const [rooms, collections, categories, subCategories] = await Promise.all([
+        mongoose.model('Room').find({ name: regex }).select('_id').lean(),
+        mongoose.model('Collection').find({ name: regex }).select('_id').lean(),
+        mongoose.model('Category').find({ name: regex }).select('_id').lean(),
+        mongoose.model('SubCategory').find({ name: regex }).select('_id').lean(),
+      ]);
+      if (rooms.length) orConditions.push({ roomIds: { $in: rooms.map((r: any) => r._id) } });
+      if (collections.length) orConditions.push({ collectionIds: { $in: collections.map((c: any) => c._id) } });
+      if (categories.length) orConditions.push({ categoryIds: { $in: categories.map((c: any) => c._id) } });
+      if (subCategories.length) orConditions.push({ subCategoryIds: { $in: subCategories.map((c: any) => c._id) } });
+      query = {
+        status: 'published',
+        deletedAt: null,
+        $or: orConditions,
+      };
+    }
 
     const products = await Product.find(query)
       .limit(10)
@@ -361,7 +399,6 @@ export async function searchProducts(req: Request, res: Response, next: NextFunc
       deletedAt: null,
     }).lean();
 
-    // Map variants back to products
     const productsWithVariants = products.map((product: any) => ({
       ...product,
       variants: variants.filter((v: any) => v.productId?.toString() === product._id?.toString()),
