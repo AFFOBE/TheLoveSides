@@ -12,6 +12,9 @@ const router = Router();
 
 router.post('/razorpay', razorpayWebhook);
 router.post('/shiprocket', shiprocketWebhook);
+// Alias without forbidden keywords (shiprocket/sr/kr) — required by Shiprocket
+// panel URL validation. This is the URL to configure in the Shiprocket dashboard.
+router.post('/courier', shiprocketWebhook);
 
 export default router;
 

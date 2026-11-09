@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { Check, X, Eye, Film } from 'lucide-react';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function ReviewsList() {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    fetchReviews();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchReviews();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchReviews = async () => {
     try {
-      const { data } = await api.get('/admin/reviews');
+      const { data } = await api.get('/admin/reviews', {
+        params: { search: searchTerm || undefined }
+      });
       setReviews(data.data || []);
     } catch (error) {
       console.error('Failed to fetch reviews', error);
@@ -36,6 +43,14 @@ export default function ReviewsList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-serif font-bold text-charcoal">Reviews</h1>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search reviews by product, customer, title, or comment..."
+        />
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">

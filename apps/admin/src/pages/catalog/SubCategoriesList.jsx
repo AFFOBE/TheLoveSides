@@ -5,14 +5,23 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTableRow } from '../../components/SortableTableRow';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function SubCategoriesList() {
   const [subCategories, setSubCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchSubCategories();
   }, []);
+
+  const q = searchTerm.trim().toLowerCase();
+  const filtered = q
+    ? subCategories.filter(sc =>
+        (sc.name || '').toLowerCase().includes(q) ||
+        (sc.categoryIds || []).some(c => (c.name || '').toLowerCase().includes(q)))
+    : subCategories;
 
   const fetchSubCategories = async () => {
     try {
@@ -83,6 +92,10 @@ export default function SubCategoriesList() {
         </Link>
       </div>
 
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search sub-categories by name or parent..." />
+      </div>
+
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -97,9 +110,9 @@ export default function SubCategoriesList() {
               </tr>
             </thead>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={subCategories.map(r => r._id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={filtered.map(r => r._id)} strategy={verticalListSortingStrategy}>
                 <tbody>
-                  {subCategories.map((subCategory) => (
+                  {filtered.map((subCategory) => (
                     <SortableTableRow key={subCategory._id} id={subCategory._id} className="border-b border-charcoal/5 hover:bg-ivory/50 bg-white">
                   <td className="p-4">
                     <img 
@@ -148,7 +161,7 @@ export default function SubCategoriesList() {
                   </td>
                 </SortableTableRow>
               ))}
-              {subCategories.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td colSpan="6" className="p-8 text-center text-charcoal/50 text-sm">
                     No Sub-Categories found. Start by adding one!

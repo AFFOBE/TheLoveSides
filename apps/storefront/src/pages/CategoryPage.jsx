@@ -49,7 +49,7 @@ export default function CategoryPage({ type }) {
 
   // Determine query based on route
   const query = {};
-  if (type === 'arrivals') query.sort = 'createdAt:desc';
+  if (type === 'arrivals') query.newArrival = 'true';
   if (type === 'bestsellers') query.bestseller = 'true';
   if (selectedSort && selectedSort !== 'newest') query.sort = selectedSort;
   
@@ -74,7 +74,7 @@ export default function CategoryPage({ type }) {
 
   // Frontend filter for static types
   const filteredProducts = products.filter(product => {
-    if (type === 'arrivals') return true; // Already sorted by newest in the API query
+    if (type === 'arrivals') return product.isNewArrival; // Only admin-marked new arrivals
     if (type === 'bestsellers') return product.isBestSeller;
     return true; 
   });

@@ -2,21 +2,15 @@ import { useState, useEffect } from 'react';
 
 export function useScrollDirection() {
   const [scrollY, setScrollY] = useState(0);
-  const [showRibbon, setShowRibbon] = useState(true);
+  // The promo ribbon is part of the fixed header now, so it stays visible
+  // at every scroll position (it no longer collapses while scrolling).
+  const showRibbon = true;
 
   useEffect(() => {
     let ticking = false;
 
     const updateScrollDir = () => {
-      const currentScrollY = window.pageYOffset;
-      setScrollY(currentScrollY);
-
-      if (currentScrollY === 0) {
-        setShowRibbon(true);
-      } else {
-        setShowRibbon(false);
-      }
-
+      setScrollY(window.pageYOffset);
       ticking = false;
     };
 
@@ -28,7 +22,7 @@ export function useScrollDirection() {
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
-    
+
     // Initial check
     updateScrollDir();
 

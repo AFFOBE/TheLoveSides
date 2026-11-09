@@ -42,7 +42,7 @@ async function sendSafe(params: {
   lines: string[];
   heading: string;
   cta?: { text: string; url: string };
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     await emailService.sendEmail({
       to: params.to,
@@ -51,8 +51,10 @@ async function sendSafe(params: {
       html: emailLayout(params.heading, params.lines, params.cta),
     });
     logger.info({ to: params.to, subject: params.subject }, 'Notification email sent');
+    return true;
   } catch (error) {
     logger.error({ err: error, to: params.to, subject: params.subject }, 'Failed to send notification email');
+    return false;
   }
 }
 
@@ -209,6 +211,35 @@ export async function sendReturnStatusEmail(params: {
     heading: `${label} status: ${statusText}`,
     lines: [
       `Your ${label.toLowerCase()} request for order <strong>${params.orderNumber}</strong> is now: <strong>${statusText}</strong>.`,
+    ],
+  });
+}
+
+/** Pending payment reminder — sent by the background job when an order is
+ *  still in PENDING_PAYMENT well after checkout. Returns true only when the
+ *  email was actually delivered to SMTP. */
+export async function sendPendingPaymentReminderEmail(
+  orderId: string,
+  amount?: number,
+): Promise<boolean> {
+  const ctx = await loadOrderContext(orderId);
+  if (!ctx) {
+    logger.warn({ orderId }, 'Pending payment reminder skipped: no customer email');
+    return false;
+  }
+
+  const greeting = ctx.firstName ? `Hi ${ctx.firstName}, your order is pending` : 'Your order is pending';
+
+  return sendSafe({
+    to: ctx.email,
+    subject: `Payment pending for order ${ctx.orderNumber} - TheLoveSides`,
+    heading: greeting,
+    cta: { text: 'View your order', url: `${env.STOREFRONT_URL}/order/${orderId}` },
+    lines: [
+      `Your order <strong>${ctx.orderNumber}</strong> is still awaiting payment, so it has not been confirmed yet.`,
+      ...(amount !== undefined ? [`Order total: <strong>Rs. ${amount.toFixed(2)}</strong>`] : []),
+      'If you have already completed the payment, please ignore this email — your order will be confirmed automatically.',
+      'Need help completing your payment? Just reply to this email and our team will assist you.',
     ],
   });
 }

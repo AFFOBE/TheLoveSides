@@ -11,8 +11,11 @@ export default function NewsletterList() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetchSubscribers();
-  }, [pagination.page, statusFilter]);
+    const timer = setTimeout(() => {
+      fetchSubscribers();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [pagination.page, statusFilter, search]);
 
   const fetchSubscribers = async () => {
     setLoading(true);
@@ -32,12 +35,6 @@ export default function NewsletterList() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setPagination((p) => ({ ...p, page: 1 }));
-    fetchSubscribers();
   };
 
   const handleToggleStatus = async (subscriber) => {
@@ -68,16 +65,16 @@ export default function NewsletterList() {
           <p className="text-sm text-gray-500 mt-1">Emails collected from the footer "Join" form.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <form onSubmit={handleSearch} className="relative">
+          <div className="relative">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPagination((p) => ({ ...p, page: 1 })); }}
               placeholder="Search email..."
               className="pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/20 focus:border-brand-accent"
             />
-          </form>
+          </div>
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPagination((p) => ({ ...p, page: 1 })); }}

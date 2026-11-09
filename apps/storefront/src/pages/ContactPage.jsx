@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 
 export default function ContactPage() {
   const { contactInfo } = useTheme();
-  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', subject: '', message: '' });
   const [status, setStatus] = useState('idle'); // idle, submitting, success, error
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -116,7 +116,7 @@ export default function ContactPage() {
                     Thank you for reaching out. We've received your message and our team will get back to you within 24 hours.
                   </p>
                   <button 
-                    onClick={() => { setStatus('idle'); setFormData({ name: '', email: '', subject: '', message: '' }); }}
+                    onClick={() => { setStatus('idle'); setFormData({ name: '', email: '', phone: '', subject: '', message: '' }); }}
                     className="px-6 py-3 bg-gray-100 text-charcoal font-medium rounded-full hover:bg-gray-200 transition-colors"
                   >
                     Send Another Message
@@ -156,17 +156,30 @@ export default function ContactPage() {
                           placeholder="jane@example.com"
                         />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="subject" className="text-sm font-medium text-gray-700">Subject</label>
-                      <input
-                        type="text"
-                        id="subject"
-                        value={formData.subject}
-                        onChange={(e) => setFormData({...formData, subject: e.target.value})}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-primary/50 focus:border-pink-primary transition-colors"
-                        placeholder="How can we help?"
-                      />
+                      <div className="space-y-2">
+                        <label htmlFor="phone" className="text-sm font-medium text-gray-700">Mobile Number *</label>
+                        <input
+                          type="tel"
+                          id="phone"
+                          required
+                          inputMode="tel"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-primary/50 focus:border-pink-primary transition-colors"
+                          placeholder="+91 98765 43210"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label htmlFor="subject" className="text-sm font-medium text-gray-700">Subject</label>
+                        <input
+                          type="text"
+                          id="subject"
+                          value={formData.subject}
+                          onChange={(e) => setFormData({...formData, subject: e.target.value})}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-primary/50 focus:border-pink-primary transition-colors"
+                          placeholder="How can we help?"
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <label htmlFor="message" className="text-sm font-medium text-gray-700">Message *</label>

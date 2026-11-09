@@ -6,6 +6,7 @@ import {
   checkServiceabilityHandler,
   listCouriersHandler,
   requestPickupHandler,
+  generateAwbHandler,
   cancelShipmentHandler,
   trackShipmentHandler,
   trackByInternalIdHandler,
@@ -38,6 +39,7 @@ router.get('/shipping/couriers', authorize('orders.read'), listCouriersHandler);
 // Shipment Management
 // ========================================
 router.get('/shipping/shipment/:shipmentId', authorize('orders.read'), getShipmentDetailsHandler);
+router.post('/shipping/awb', authorize('orders.update'), generateAwbHandler);
 router.post('/shipping/pickup', authorize('orders.update'), requestPickupHandler);
 router.post('/shipping/cancel', authorize('orders.update'), cancelShipmentHandler);
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Gift } from 'lucide-react';
+import { Gift } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import clsx from 'clsx';
 
@@ -16,14 +16,6 @@ export default function NavbarRibbon({ isVisible }) {
     return () => clearInterval(timer);
   }, [promoOffers]);
 
-  const handlePrev = () => {
-    setCurrentIndex((prev) => (prev === 0 ? promoOffers.length - 1 : prev - 1));
-  };
-
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % promoOffers.length);
-  };
-
   if (!promoOffers || promoOffers.length === 0) return null;
 
   return (
@@ -34,15 +26,7 @@ export default function NavbarRibbon({ isVisible }) {
       )} 
       style={{ height: isVisible ? '40px' : '0px' }}
     >
-      <button 
-        onClick={handlePrev} 
-        className="absolute left-2 md:left-4 p-1 hover:text-pink-primary transition-colors focus:outline-none z-10"
-        aria-label="Previous Offer"
-      >
-        <ChevronLeft className="w-4 h-4 md:w-5 md:h-5" />
-      </button>
-
-      <div className="flex-grow flex justify-center items-center h-full max-w-[85%] mx-auto py-2">
+      <div className="flex-grow flex justify-center items-center h-full max-w-[90%] mx-auto py-2">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentIndex}
@@ -57,14 +41,6 @@ export default function NavbarRibbon({ isVisible }) {
           </motion.div>
         </AnimatePresence>
       </div>
-
-      <button 
-        onClick={handleNext} 
-        className="absolute right-2 md:right-4 p-1 hover:text-pink-primary transition-colors focus:outline-none z-10"
-        aria-label="Next Offer"
-      >
-        <ChevronRight className="w-4 h-4 md:w-5 md:h-5" />
-      </button>
     </div>
   );
 }

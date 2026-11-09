@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import Button from '../ui/Button';
-import { Star, X, Loader2, Image as ImageIcon, CheckCircle } from 'lucide-react';
+import { Star, X, Loader2, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
+import StarRating from '../ui/StarRating';
 import ReviewForm from './ReviewForm';
+
+const EMPTY_BREAKDOWN = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
 
 export default function ProductReviews({ productId }) {
   const [reviews, setReviews] = useState([]);
+  const [stats, setStats] = useState({ averageRating: 0, reviewsCount: 0, breakdown: EMPTY_BREAKDOWN });
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [hasReviewed, setHasReviewed] = useState(false);
@@ -17,6 +21,7 @@ export default function ProductReviews({ productId }) {
   useEffect(() => {
     if (productId) {
       fetchReviews();
+      fetchStats();
       if (isAuthenticated) {
         checkHasReviewed();
       }
@@ -47,16 +52,40 @@ export default function ProductReviews({ productId }) {
     }
   };
 
+  // Real, aggregated rating data straight from approved customer reviews.
+  const fetchStats = async () => {
+    try {
+      const res = await api.get(`/reviews/stats/${productId}`);
+      setStats({
+        averageRating: res.data?.averageRating || 0,
+        reviewsCount: res.data?.reviewsCount || 0,
+        breakdown: { ...EMPTY_BREAKDOWN, ...(res.data?.breakdown || {}) },
+      });
+    } catch (error) {
+      console.error('Failed to fetch rating stats', error);
+    }
+  };
+
   const handleReviewSubmit = () => {
     setShowForm(false);
     setHasReviewed(true);
     fetchReviews();
+    fetchStats();
   };
+
+  const totalReviews = Number(stats.reviewsCount) || 0;
 
   return (
     <div className="mt-16 pt-12 border-t border-gray-200">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-2xl font-serif text-charcoal">Customer Reviews</h2>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
+        <div>
+          <h2 className="text-2xl font-serif text-charcoal">Customer Reviews</h2>
+          <p className="text-sm font-sans text-charcoal/50 mt-1">
+            {totalReviews > 0
+              ? `${totalReviews} ${totalReviews === 1 ? 'review' : 'reviews'} from verified buyers`
+              : 'No reviews yet — be the first to share your experience'}
+          </p>
+        </div>
         {!showForm && !hasReviewed && canReview && (
           <Button variant="outline" onClick={() => setShowForm(true)}>
             Write a Review
@@ -68,6 +97,45 @@ export default function ProductReviews({ productId }) {
           </div>
         )}
       </div>
+
+      {/* Live rating summary */}
+      {totalReviews > 0 && (
+        <div className="grid md:grid-cols-[260px_1fr] gap-6 md:gap-10 bg-[#fdecf4]/60 rounded-2xl p-6 md:p-8 mb-10">
+          <div className="flex flex-col items-center justify-center text-center md:border-r md:border-charcoal/10 md:pr-8">
+            <span className="font-serif text-5xl text-charcoal leading-none">
+              {Number(stats.averageRating).toFixed(1)}
+            </span>
+            <div className="my-3">
+              <StarRating value={stats.averageRating} />
+            </div>
+            <span className="text-xs font-sans uppercase tracking-[0.15em] text-charcoal/50">
+              Based on {totalReviews} {totalReviews === 1 ? 'review' : 'reviews'}
+            </span>
+          </div>
+
+          <div className="space-y-2 self-center">
+            {[5, 4, 3, 2, 1].map((star) => {
+              const count = Number(stats.breakdown?.[String(star)]) || 0;
+              const percent = totalReviews > 0 ? Math.round((count / totalReviews) * 100) : 0;
+              return (
+                <div key={star} className="flex items-center gap-3">
+                  <span className="flex items-center gap-1 w-10 shrink-0 text-xs font-sans text-charcoal/60">
+                    {star}
+                    <Star className="w-3 h-3 fill-gold text-gold" />
+                  </span>
+                  <div className="flex-1 h-2 rounded-full bg-charcoal/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-pink-primary transition-all duration-500"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                  <span className="w-10 text-right text-xs font-sans text-charcoal/50">{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <AnimatePresence>
         {showForm && (
@@ -130,13 +198,17 @@ function ReviewItem({ review }) {
           {review.title}
         </span>
       </div>
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         <span className="text-sm text-gray-500 font-medium">
           {review.userId?.firstName ? `${review.userId.firstName} ${review.userId.lastName}` : (review.customerName || 'Verified Buyer')}
         </span>
-        <span className="text-xs text-gray-400">•</span>
+        {review.isVerifiedPurchase && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-sans text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+            <CheckCircle className="w-3 h-3" /> Verified
+          </span>
+        )}
         <span className="text-xs text-gray-400">
-          {new Date(review.createdAt).toLocaleDateString()}
+          {new Date(review.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
         </span>
       </div>
       <p className="text-gray-600 text-sm leading-relaxed mb-4">
@@ -177,5 +249,3 @@ function ReviewItem({ review }) {
     </div>
   );
 }
-
-

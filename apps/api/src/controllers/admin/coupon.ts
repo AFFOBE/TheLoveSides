@@ -4,19 +4,29 @@ import { sendSuccess, sendPaginated } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { createAuditLog } from '../../services/audit.service.js';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
 export async function listCoupons(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 1000;
     const skip = (page - 1) * limit;
 
+    const query: Record<string, unknown> = {};
+    if (req.query.search) {
+      const s = String(req.query.search).trim();
+      if (s) query.code = { $regex: escapeRegex(s), $options: 'i' };
+    }
+
     const [coupons, total] = await Promise.all([
-      Coupon.find()
+      Coupon.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Coupon.countDocuments(),
+      Coupon.countDocuments(query),
     ]);
 
     sendPaginated(res, coupons, {

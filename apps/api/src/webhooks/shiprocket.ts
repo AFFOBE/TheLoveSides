@@ -122,8 +122,11 @@ function getOrderStatusFromShipmentStatus(shipmentStatus: ShipmentStatus): strin
  */
 export async function shiprocketWebhook(req: Request, res: Response, _next: NextFunction): Promise<void> {
   try {
-    // Verify webhook token (query-string based authentication)
-    const token = req.query.token as string;
+    // Accept token via query string OR x-api-key header (panel default type)
+    const token =
+      (req.query.token as string) ||
+      (req.headers['x-api-key'] as string) ||
+      (req.headers.authorization as string | undefined)?.replace(/^Bearer\s+/i, '');
     if (env.SHIPROCKET_WEBHOOK_TOKEN && token !== env.SHIPROCKET_WEBHOOK_TOKEN) {
       logger.warn('Invalid Shiprocket webhook token');
       res.status(401).send('Unauthorized');

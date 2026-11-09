@@ -6,8 +6,8 @@ import ResponsiveCardSlider from '../ui/ResponsiveCardSlider';
 import { useProducts } from '../../hooks/useProducts';
 
 export default function NewArrivals() {
-  // Try to get latest products. If backend doesn't support sorting, it will fallback to default list
-  const query = { limit: 8, sort: '-createdAt' };
+  // Same behaviour as Best Sellers: only products marked "New Arrival" in admin.
+  const query = { limit: 8, newArrival: true };
   const { products, loading } = useProducts(query);
 
   const renderProduct = (product, idx) => (

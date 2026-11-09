@@ -129,31 +129,93 @@ export async function generateInvoicePDF(orderId: string): Promise<Buffer> {
   });
 }
 
-export async function sendOrderConfirmationEmail(orderId: string, email: string) {
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export async function sendOrderConfirmationEmail(orderId: string, email: string, maxAttempts = 3) {
+  let html: string;
+  let subject: string;
+  let text: string;
+
   try {
-    const pdfBuffer = await generateInvoicePDF(orderId);
-    
-    await emailService.sendEmail({
-      to: email,
-      subject: `Order Confirmation - TheLoveSides`,
-      text: `Thank you for your order! Please find your invoice attached.`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-          <h2 style="color: #d81b60;">Thank you for your order!</h2>
-          <p>We've received your order and are getting it ready for shipment.</p>
-          <p>Please find your order invoice attached as a PDF document.</p>
-          <br/>
-          <p>Best Regards,</p>
-          <p><strong>TheLoveSides Team</strong></p>
-        </div>
-      `,
-      attachments: [{
-        filename: 'Invoice.pdf',
-        content: pdfBuffer,
-      }],
-    });
-    logger.info({ orderId, email }, 'Order confirmation email with invoice sent');
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      logger.error({ orderId }, 'Cannot send order confirmation: order not found');
+      return;
+    }
+
+    const itemsHtml = (order.items || [])
+      .map(
+        (item) => `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #eee;">${escapeHtml(item.name)} &times; ${item.quantity}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">&#8377;${(item.price * item.quantity).toFixed(2)}</td>
+        </tr>`
+      )
+      .join('');
+
+    subject = `Order Confirmation ${order.orderNumber} - TheLoveSides`;
+    text = `Thank you for your order! Order Number: ${order.orderNumber}. Grand Total: Rs. ${order.grandTotal}. Your invoice is attached as a PDF.`;
+    html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <h2 style="color: #d81b60;">Thank you for your order, ${escapeHtml(order.shippingAddress.fullName)}!</h2>
+        <p>We've received your order and are getting it ready for shipment.</p>
+        <p style="margin-top:16px;"><strong>Order Number:</strong> ${escapeHtml(order.orderNumber)}</p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+          <thead>
+            <tr style="background:#f7f7f7;">
+              <th style="padding:8px 12px;text-align:left;">Item</th>
+              <th style="padding:8px 12px;text-align:right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${itemsHtml}</tbody>
+          <tfoot>
+            <tr>
+              <td style="padding:10px 12px;font-weight:bold;border-top:2px solid #333;">Grand Total</td>
+              <td style="padding:10px 12px;text-align:right;font-weight:bold;border-top:2px solid #333;">&#8377;${order.grandTotal.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <p>Your detailed invoice is attached as a PDF. You can view live order status anytime under "My Orders" on our website.</p>
+        <br/>
+        <p>Best Regards,</p>
+        <p><strong>TheLoveSides Team</strong></p>
+      </div>
+    `;
   } catch (error) {
-    logger.error({ err: error, orderId }, 'Failed to send order confirmation email');
+    logger.error({ err: error, orderId }, 'Failed to build order confirmation email');
+    return;
   }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const pdfBuffer = await generateInvoicePDF(orderId);
+
+      await emailService.sendEmail({
+        to: email,
+        subject,
+        text,
+        html,
+        attachments: [{
+          filename: `Invoice.pdf`,
+          content: pdfBuffer,
+        }],
+      });
+      logger.info({ orderId, email, attempt }, 'Order confirmation email with invoice sent');
+      return;
+    } catch (error) {
+      logger.error({ err: error, orderId, attempt, maxAttempts }, 'Order confirmation email attempt failed');
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+      }
+    }
+  }
+
+  logger.error({ orderId, email, maxAttempts }, 'Order confirmation email failed after all attempts');
 }

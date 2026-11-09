@@ -6,6 +6,7 @@ import {
   checkPincodeServiceability,
   listCouriers,
   requestPickup,
+  assignAwbSmart,
   cancelShiprocketOrder,
   trackAWB,
   trackByShipmentId,
@@ -128,6 +129,9 @@ export async function requestPickupHandler(req: Request, res: Response, next: Ne
 
     const data = await requestPickup(parseInt(shipment.shiprocketShipmentId));
 
+    shipment.pickupDate = new Date();
+    await shipment.save();
+
     await createAuditLog({
       action: 'shipping.pickup_request',
       resource: 'Shipment',
@@ -137,6 +141,68 @@ export async function requestPickupHandler(req: Request, res: Response, next: Ne
     });
 
     sendSuccess({ res, data, message: 'Pickup scheduled successfully' });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /admin/shipping/awb
+ * Generate/assign AWB for a shipment that doesn't have one yet.
+ */
+export async function generateAwbHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    assertShiprocketConfigured();
+
+    const { shipmentId } = req.body;
+    if (!shipmentId) {
+      throw ApiError.badRequest('shipmentId is required');
+    }
+
+    const shipment = await Shipment.findById(shipmentId);
+    if (!shipment) {
+      throw ApiError.notFound('Shipment');
+    }
+
+    if (shipment.awbCode) {
+      sendSuccess({ res, data: shipment, message: 'AWB already assigned' });
+      return;
+    }
+
+    if (!shipment.shiprocketShipmentId) {
+      throw ApiError.badRequest('Shipment has not been created in Shiprocket yet');
+    }
+
+    const data = await assignAwbSmart(
+      parseInt(shipment.shiprocketOrderId || '0'),
+      parseInt(shipment.shiprocketShipmentId)
+    );
+    const assignedAwb = data?.awb_code || data?.data?.awb_code;
+    if (!assignedAwb) {
+      throw ApiError.internal(data?.message || data?.data?.message || 'AWB assignment failed at courier');
+    }
+
+    shipment.awbCode = assignedAwb;
+    const courierName = data?.courier_name || data?.data?.courier_name;
+    if (courierName) {
+      shipment.courierName = courierName;
+    }
+    const courierId = data?.courier_company_id || data?.data?.courier_company_id;
+    if (courierId) {
+      shipment.courierId = parseInt(String(courierId));
+    }
+    shipment.status = 'AWB_ASSIGNED';
+    await shipment.save();
+
+    await createAuditLog({
+      action: 'shipping.awb_generate',
+      resource: 'Shipment',
+      resourceId: shipmentId,
+      details: { awbCode: assignedAwb, courierName: shipment.courierName },
+      req,
+    });
+
+    sendSuccess({ res, data: shipment, message: 'AWB generated successfully' });
   } catch (error) {
     next(error);
   }

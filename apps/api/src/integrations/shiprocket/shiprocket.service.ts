@@ -352,13 +352,72 @@ export async function generateAWB(shipmentId: number, courierId?: string) {
     const data = await response.json() as any;
     
     if (!response.ok) {
-      throw new Error(`Shiprocket API Error: ${data.message || response.statusText}`);
+      throw new Error(`Shiprocket: ${data.message || response.statusText}`);
     }
     
     return data;
   } catch (error) {
     logger.error({ err: error, shipmentId }, 'Failed to generate AWB');
-    throw ApiError.internal('Shipping gateway error');
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    const msg = error instanceof Error ? error.message : 'Shipping gateway error';
+    throw ApiError.internal(msg);
+  }
+}
+
+/**
+ * Assigns an AWB for a shipment.
+ * 1) Tries direct assignment (works when the account auto-selects a courier).
+ * 2) Falls back to fetching serviceable couriers for the order, picks the
+ *    cheapest one, and assigns the AWB explicitly.
+ */
+export async function assignAwbSmart(shiprocketOrderId: number, shipmentId: number): Promise<any> {
+  let lastError = '';
+
+  try {
+    const direct = await generateAWB(shipmentId);
+    const awb = direct?.awb_code || direct?.data?.awb_code;
+    if (awb) {
+      return direct;
+    }
+    lastError = direct?.message || direct?.data?.message || 'AWB not assigned';
+  } catch (error) {
+    lastError = error instanceof ApiError ? error.message : (error instanceof Error ? error.message : '');
+  }
+
+  // Fallback: pick a serviceable courier and assign explicitly
+  try {
+    const response = await shiprocketFetch(`/courier/serviceability?order_id=${shiprocketOrderId}`);
+    const svc = await response.json() as any;
+    const couriers: any[] = svc?.data?.available_courier_companies || [];
+    const usable = couriers.filter((c) => !c.blocked && c.courier_company_id);
+
+    if (usable.length === 0) {
+      throw new Error(lastError || 'No serviceable courier found for this order');
+    }
+
+    usable.sort((a, b) => (parseFloat(a.rate || '99999') - parseFloat(b.rate || '99999')));
+    const best = usable[0];
+
+    logger.info(
+      { shiprocketOrderId, shipmentId, courier: best.courier_name, rate: best.rate },
+      'Assigning AWB via serviceability fallback'
+    );
+
+    const assigned = await generateAWB(shipmentId, String(best.courier_company_id));
+    const awb = assigned?.awb_code || assigned?.data?.awb_code;
+    if (awb) {
+      return assigned;
+    }
+    throw new Error(assigned?.message || assigned?.data?.message || 'AWB not assigned by courier');
+  } catch (error) {
+    logger.error({ err: error, shiprocketOrderId, shipmentId }, 'Smart AWB assignment failed');
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    const msg = (error instanceof Error ? error.message : '') || lastError || 'AWB assignment failed';
+    throw ApiError.internal(msg.startsWith('Shiprocket') ? msg : `Shiprocket: ${msg}`);
   }
 }
 

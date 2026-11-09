@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, ShoppingBag, Search, User, Heart, X } from 'lucide-react';
+import { Menu, ShoppingBag, Search, User, Heart, X, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useScrollDirection } from '../../hooks/useScrollDirection';
 import { useCart } from '../../context/CartContext';
@@ -13,7 +13,7 @@ import Badge from '../ui/Badge';
 import CartDrawer from '../cart/CartDrawer';
 import { useAuth } from '../../context/AuthContext';
 import AuthModal from '../auth/AuthModal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import LogoImage from '../../assets/images/LogoProcessed.png';
 import { api } from '../../lib/api';
 
@@ -25,6 +25,7 @@ export default function Navbar() {
   const { cartIconRef } = useFlyToCart();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -69,6 +70,16 @@ export default function Navbar() {
   const closeNavDropdown = () => {
     if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
     dropdownTimerRef.current = setTimeout(() => setOpenDropdown(null), 200);
+  };
+
+  const handleGoBack = () => {
+    // Go to the previous page when there is history, otherwise land on home.
+    const historyIndex = window.history.state?.idx;
+    if (typeof historyIndex === 'number' && historyIndex > 0) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
   };
 
   const handleSearchChange = (e) => {
@@ -361,6 +372,23 @@ export default function Navbar() {
             })}
           </nav>
         </div>
+
+        {/* ROW 4: Back (hidden on home page) */}
+        {pathname !== '/' && (
+          <div className="w-full bg-cream border-b border-charcoal/10">
+            <div className="max-w-7xl mx-auto px-6 md:px-10 py-2">
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="group inline-flex items-center gap-2 text-[11px] md:text-xs font-sans font-semibold uppercase tracking-[0.18em] text-charcoal/70 hover:text-pink-primary transition-colors focus:outline-none"
+                aria-label="Go back"
+              >
+                <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-1" />
+                Back
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       <MobileMenu

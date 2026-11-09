@@ -3,18 +3,28 @@ import { ContactLead } from '../models/ContactLead.js';
 import { sendSuccess, sendError } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
 // Public endpoint: Submit a contact form lead
 export const submitLead = async (req: Request, res: Response) => {
   try {
-    const { name, email, subject, message } = req.body;
-    
-    if (!name || !email || !message) {
-      throw ApiError.badRequest('Name, email, and message are required');
+    const { name, email, phone, subject, message } = req.body;
+
+    if (!name || !email || !phone || !message) {
+      throw ApiError.badRequest('Name, email, phone, and message are required');
+    }
+
+    const phoneDigits = String(phone).replace(/\D/g, '');
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+      throw ApiError.badRequest('Please enter a valid phone number');
     }
 
     const newLead = await ContactLead.create({
       name,
       email,
+      phone: String(phone).trim(),
       subject,
       message
     });
@@ -42,6 +52,13 @@ export const getLeads = async (req: Request, res: Response) => {
 
     const query: any = {};
     if (status) query.status = status;
+    if (req.query.search) {
+      const tokens = String(req.query.search).trim().split(/\s+/).filter(Boolean);
+      query.$and = tokens.map((t) => {
+        const regex = new RegExp(escapeRegex(t), 'i');
+        return { $or: [{ name: regex }, { email: regex }, { phone: regex }, { subject: regex }] };
+      });
+    }
 
     const leads = await ContactLead.find(query)
       .sort({ createdAt: -1 })

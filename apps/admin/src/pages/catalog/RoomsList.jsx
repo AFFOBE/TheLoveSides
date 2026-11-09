@@ -5,14 +5,21 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTableRow } from '../../components/SortableTableRow';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function RoomsList() {
   const [Rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchRooms();
   }, []);
+
+  const q = searchTerm.trim().toLowerCase();
+  const filtered = q
+    ? Rooms.filter(r => (r.name || '').toLowerCase().includes(q) || (r.slug || '').toLowerCase().includes(q))
+    : Rooms;
 
   const fetchRooms = async () => {
     try {
@@ -86,6 +93,10 @@ export default function RoomsList() {
         </Link>
       </div>
 
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search rooms by name or slug..." />
+      </div>
+
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -100,9 +111,9 @@ export default function RoomsList() {
               </tr>
             </thead>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={Rooms.map(r => r._id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={filtered.map(r => r._id)} strategy={verticalListSortingStrategy}>
                 <tbody>
-                  {Rooms.map((Room) => (
+                  {filtered.map((Room) => (
                     <SortableTableRow key={Room._id} id={Room._id} className="border-b border-charcoal/5 hover:bg-ivory/50 bg-white">
                   <td className="p-4">
                     <img 
@@ -143,7 +154,7 @@ export default function RoomsList() {
                   </td>
                 </SortableTableRow>
               ))}
-              {Rooms.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td colSpan="5" className="p-8 text-center text-charcoal/50 text-sm">
                     No Rooms found. Start by adding one!

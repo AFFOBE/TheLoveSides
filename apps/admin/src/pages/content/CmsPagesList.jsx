@@ -2,15 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Plus, Edit, Trash2, Link as LinkIcon, Check } from 'lucide-react';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function CmsPagesList() {
   const [pages, setPages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copiedSlug, setCopiedSlug] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchPages();
   }, []);
+
+  const q = searchTerm.trim().toLowerCase();
+  const filtered = q
+    ? pages.filter(p => (p.title || '').toLowerCase().includes(q) || (p.slug || '').toLowerCase().includes(q))
+    : pages;
 
   const fetchPages = async () => {
     try {
@@ -55,6 +62,10 @@ export default function CmsPagesList() {
         </Link>
       </div>
 
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search pages by title or slug..." />
+      </div>
+
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -68,7 +79,7 @@ export default function CmsPagesList() {
               </tr>
             </thead>
             <tbody>
-              {pages.map((page) => (
+              {filtered.map((page) => (
                 <tr key={page._id} className="border-b border-charcoal/5 hover:bg-ivory/50">
                   <td className="p-4">
                     <p className="text-sm font-medium text-charcoal">{page.title}</p>
@@ -110,7 +121,7 @@ export default function CmsPagesList() {
                   </td>
                 </tr>
               ))}
-              {pages.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td colSpan="5" className="p-8 text-center text-charcoal/50 text-sm">
                     No pages found. Start by creating one!

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Search, Eye, Filter, Loader2, RotateCcw } from 'lucide-react';
 import clsx from 'clsx';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function ReturnsList() {
   const [returns, setReturns] = useState([]);
@@ -11,11 +12,15 @@ export default function ReturnsList() {
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchReturns();
-  }, [page, statusFilter, typeFilter]);
+    const timer = setTimeout(() => {
+      fetchReturns();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [page, statusFilter, typeFilter, searchTerm]);
 
   const fetchReturns = async () => {
     setLoading(true);
@@ -26,10 +31,11 @@ export default function ReturnsList() {
           limit: 20,
           status: statusFilter || undefined,
           type: typeFilter || undefined,
+          search: searchTerm || undefined,
         }
       });
       setReturns(data.data);
-      setTotalPages(data.meta.totalPages);
+      setTotalPages(data.meta?.pagination?.totalPages || 1);
     } catch (error) {
       console.error('Failed to fetch returns:', error);
     } finally {
@@ -70,6 +76,11 @@ export default function ReturnsList() {
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5">
         {/* Filters */}
         <div className="p-4 border-b border-charcoal/5 flex flex-wrap gap-4 items-center justify-between">
+          <SearchBar
+            value={searchTerm}
+            onChange={(v) => { setSearchTerm(v); setPage(1); }}
+            placeholder="Search by request ID, order number, or customer..."
+          />
           <div className="flex items-center gap-4">
             <div className="relative">
               <Filter className="w-4 h-4 text-charcoal/40 absolute left-3 top-1/2 -translate-y-1/2" />

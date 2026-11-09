@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { 
   Package, Truck, MapPin, CreditCard, Clock, 
-  CheckCircle, XCircle, ArrowLeft, User, Phone, 
+  CheckCircle, XCircle, ArrowLeft, User, Phone, Mail, MessageCircle,
   Calendar, RefreshCw, Box, ChevronDown, Activity, ShieldCheck, FileText, Ticket
 } from 'lucide-react';
 
@@ -51,7 +51,11 @@ export default function OrderDetails() {
     if (!window.confirm('Create shipment for this order?')) return;
     setUpdating(true);
     try {
-      await api.post(`/admin/orders/${id}/shipment`);
+      const res = await api.post(`/admin/orders/${id}/shipment`);
+      const awbResult = res.data?.data;
+      if (res.data?.message && awbResult && !awbResult.awbCode) {
+        alert(res.data.message);
+      }
       fetchOrder();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to create shipment');
@@ -68,6 +72,19 @@ export default function OrderDetails() {
       fetchOrder();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to schedule pickup');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleGenerateAwb = async (shipmentId) => {
+    if (!window.confirm('Generate AWB for this shipment?')) return;
+    setUpdating(true);
+    try {
+      await api.post('/admin/shipping/awb', { shipmentId });
+      fetchOrder();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to generate AWB');
     } finally {
       setUpdating(false);
     }
@@ -316,13 +333,55 @@ export default function OrderDetails() {
                 <div className="w-12 h-12 rounded-full bg-charcoal/10 flex items-center justify-center text-charcoal font-bold text-lg shrink-0">
                   {order.shippingAddress?.fullName?.charAt(0).toUpperCase()}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="font-bold text-charcoal">{order.shippingAddress?.fullName}</p>
-                  <p className="text-sm text-charcoal/60 flex items-center gap-1 mt-1">
+                  <a
+                    href={`tel:${order.shippingAddress?.phone}`}
+                    className="text-sm text-charcoal/60 flex items-center gap-1 mt-1 hover:text-brand transition-colors"
+                  >
                     <Phone className="w-3.5 h-3.5" />
                     {order.shippingAddress?.phone}
-                  </p>
+                  </a>
+                  {order.userId?.email && (
+                    <a
+                      href={`mailto:${order.userId.email}`}
+                      className="text-sm text-charcoal/60 flex items-center gap-1 mt-1 hover:text-brand transition-colors break-all"
+                    >
+                      <Mail className="w-3.5 h-3.5 shrink-0" />
+                      {order.userId.email}
+                    </a>
+                  )}
                 </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={`tel:${order.shippingAddress?.phone}`}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-charcoal text-white rounded-lg hover:bg-charcoal/90 active:scale-95 transition-all"
+                >
+                  <Phone className="w-4 h-4" />
+                  Call
+                </a>
+                {order.shippingAddress?.phone && (
+                  <a
+                    href={`https://wa.me/${String(order.shippingAddress.phone).replace(/\D/g, '').length === 10 ? `91${String(order.shippingAddress.phone).replace(/\D/g, '')}` : String(order.shippingAddress.phone).replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 active:scale-95 transition-all"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    WhatsApp
+                  </a>
+                )}
+                {order.userId?.email && (
+                  <a
+                    href={`mailto:${order.userId.email}?subject=${encodeURIComponent(`Regarding your order ${order.orderNumber}`)}`}
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-white border border-charcoal/10 text-charcoal rounded-lg hover:bg-ivory active:scale-95 transition-all"
+                  >
+                    <Mail className="w-4 h-4" />
+                    Email
+                  </a>
+                )}
               </div>
               
               <div className="relative pt-2">
@@ -433,7 +492,17 @@ export default function OrderDetails() {
                           </button>
                         )}
                         
-                        {['CREATED', 'SHIPMENT_CREATED', 'AWB_ASSIGNED'].includes(shipment.status) && !shipment.pickupScheduled && (
+                        {!shipment.awbCode && !['CANCELLED', 'DELIVERED'].includes(shipment.status) && (
+                          <button 
+                            onClick={() => handleGenerateAwb(shipment._id)}
+                            disabled={updating}
+                            className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold bg-charcoal text-white rounded-lg hover:bg-charcoal/90 active:scale-95 transition-all disabled:opacity-50"
+                          >
+                            Generate AWB
+                          </button>
+                        )}
+                        
+                        {['CREATED', 'SHIPMENT_CREATED', 'AWB_ASSIGNED'].includes(shipment.status) && shipment.awbCode && !shipment.pickupDate && (
                           <button 
                             onClick={() => handleSchedulePickup(shipment._id)}
                             disabled={updating}

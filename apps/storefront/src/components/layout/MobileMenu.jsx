@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
+import { X, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -9,6 +9,12 @@ import LogoImage from '../../assets/images/LogoProcessed.png';
 export default function MobileMenu({ isOpen, onClose, onAuthClick }) {
   const { navbarLinks } = useTheme();
   const { isAuthenticated } = useAuth();
+  const [openTitle, setOpenTitle] = useState(null);
+
+  // Always start with every subcategory collapsed whenever the menu opens.
+  React.useEffect(() => {
+    if (isOpen) setOpenTitle(null);
+  }, [isOpen]);
   
   // Prevent body scroll when menu is open
   React.useEffect(() => {
@@ -63,32 +69,76 @@ export default function MobileMenu({ isOpen, onClose, onAuthClick }) {
               </button>
             </div>
             
-            <nav className="flex flex-col gap-6 font-sans text-lg text-charcoal font-medium overflow-y-auto max-h-[60vh] no-scrollbar">
-              {(navbarLinks || []).map((link) => (
-                <div key={link.title} className="flex flex-col gap-4">
-                  <Link 
-                    to={link.href} 
-                    className="hover:text-pink-primary transition-colors w-fit tracking-wide uppercase text-sm"
-                    onClick={onClose}
-                  >
-                    {link.title}
-                  </Link>
-                  {link.subLinks && link.subLinks.length > 0 && (
-                    <div className="flex flex-col gap-3 pl-4 border-l-2 border-charcoal/10 ml-1">
-                      {link.subLinks.map(sub => (
-                        <Link
-                          key={sub.name}
-                          to={sub.href}
-                          className="text-sm text-charcoal/70 hover:text-pink-primary transition-colors w-fit"
-                          onClick={onClose}
+            <nav className="flex-1 min-h-0 overflow-y-auto mobile-menu-scroll pr-2 flex flex-col gap-5 font-sans text-lg text-charcoal font-medium">
+              {(navbarLinks || []).map((link) => {
+                const hasSubLinks = link.subLinks && link.subLinks.length > 0;
+                const isExpanded = openTitle === link.title;
+                const viewAllHref =
+                  link.href && link.href !== '#'
+                    ? link.href
+                    : `/products?q=${encodeURIComponent(link.title)}`;
+
+                if (!hasSubLinks) {
+                  return (
+                    <Link
+                      key={link.title}
+                      to={viewAllHref}
+                      className="hover:text-pink-primary transition-colors w-fit tracking-wide uppercase text-sm"
+                      onClick={onClose}
+                    >
+                      {link.title}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <div key={link.title} className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => setOpenTitle((prev) => (prev === link.title ? null : link.title))}
+                      className="flex items-center justify-between w-full text-left tracking-wide uppercase text-sm hover:text-pink-primary transition-colors rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-primary py-0.5"
+                      aria-expanded={isExpanded}
+                    >
+                      <span>{link.title}</span>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 text-charcoal/50 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-pink-primary' : ''}`}
+                      />
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: 'easeInOut' }}
+                          className="overflow-hidden"
                         >
-                          {sub.name}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                          <div className="flex flex-col gap-3 pl-4 border-l-2 border-charcoal/10 ml-1 mt-3">
+                            <Link
+                              to={viewAllHref}
+                              className="text-sm font-semibold text-pink-dark hover:text-pink-primary transition-colors w-fit"
+                              onClick={onClose}
+                            >
+                              View All {link.title}
+                            </Link>
+                            {link.subLinks.map(sub => (
+                              <Link
+                                key={sub.name}
+                                to={sub.href}
+                                className="text-sm text-charcoal/70 hover:text-pink-primary transition-colors w-fit"
+                                onClick={onClose}
+                              >
+                                {sub.name}
+                              </Link>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
             </nav>
 
             <div className="mt-8 pt-8 border-t border-charcoal/10">

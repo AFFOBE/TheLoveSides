@@ -5,14 +5,21 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTableRow } from '../../components/SortableTableRow';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function CollectionsList() {
   const [collections, setCollections] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchCollections();
   }, []);
+
+  const q = searchTerm.trim().toLowerCase();
+  const filtered = q
+    ? collections.filter(c => (c.name || '').toLowerCase().includes(q) || (c.slug || '').toLowerCase().includes(q))
+    : collections;
 
   const fetchCollections = async () => {
     try {
@@ -83,6 +90,10 @@ export default function CollectionsList() {
         </Link>
       </div>
 
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search collections by name or slug..." />
+      </div>
+
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -97,9 +108,9 @@ export default function CollectionsList() {
               </tr>
             </thead>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={collections.map(c => c._id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={filtered.map(c => c._id)} strategy={verticalListSortingStrategy}>
                 <tbody>
-                  {collections.map((collection) => (
+                  {filtered.map((collection) => (
                     <SortableTableRow key={collection._id} id={collection._id} className="border-b border-charcoal/5 hover:bg-ivory/50 bg-white">
                   <td className="p-4">
                     <img 
@@ -140,7 +151,7 @@ export default function CollectionsList() {
                   </td>
                 </SortableTableRow>
               ))}
-              {collections.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td colSpan="5" className="p-8 text-center text-charcoal/50 text-sm">
                     No collections found. Start by adding one!

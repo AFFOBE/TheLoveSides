@@ -2,18 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function UsersList() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchUsers();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchUsers = async () => {
     try {
-      const { data } = await api.get('/admin/users'); 
+      const { data } = await api.get('/admin/users', {
+        params: { search: searchTerm || undefined }
+      });
       setUsers(data.data?.data || data.data || []);
     } catch (error) {
       console.error('Failed to fetch users', error);
@@ -29,11 +36,20 @@ export default function UsersList() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-serif font-bold text-charcoal">Admin Users & Roles</h1>
         <button 
+          style={{ display: 'none' }}
           className="flex items-center gap-2 bg-charcoal text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-black transition-colors"
         >
           <Plus className="w-4 h-4" />
           Add User
         </button>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search users by name or email..."
+        />
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">

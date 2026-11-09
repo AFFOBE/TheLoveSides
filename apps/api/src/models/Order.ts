@@ -67,6 +67,8 @@ export interface IOrder extends Document {
   deliveredAt?: Date;
   cancelledAt?: Date;
   cancellationReason?: string;
+  /** When the "your order is still pending" reminder email was sent. */
+  paymentReminderSentAt?: Date;
   deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -161,6 +163,7 @@ const orderSchema = new Schema<IOrder>(
     deliveredAt: { type: Date },
     cancelledAt: { type: Date },
     cancellationReason: { type: String },
+    paymentReminderSentAt: { type: Date },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },
@@ -168,6 +171,7 @@ const orderSchema = new Schema<IOrder>(
 
 orderSchema.index({ userId: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ status: 1, paymentReminderSentAt: 1 });
 orderSchema.index({ createdAt: -1 });
 
 export const Order = mongoose.model<IOrder>('Order', orderSchema);

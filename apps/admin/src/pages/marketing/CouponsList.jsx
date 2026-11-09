@@ -2,18 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Plus, Edit, Trash2 } from 'lucide-react';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function CouponsList() {
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    fetchCoupons();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchCoupons();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchCoupons = async () => {
     try {
-      const { data } = await api.get('/admin/coupons');
+      const { data } = await api.get('/admin/coupons', {
+        params: { search: searchTerm || undefined }
+      });
       setCoupons(data.data?.data || data.data || []);
     } catch (error) {
       console.error('Failed to fetch coupons', error);
@@ -45,6 +52,14 @@ export default function CouponsList() {
           <Plus className="w-4 h-4" />
           Add Coupon
         </Link>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search coupons by code..."
+        />
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">

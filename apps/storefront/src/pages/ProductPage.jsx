@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, Info, Ruler, Truck, Shield, RefreshCw, Calendar, Star, Award, Sparkles, Heart } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Info, Ruler, Truck, Shield, RefreshCw, Calendar, Star, Award, Sparkles, Heart, Film } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useFlyToCart } from '../context/FlyToCartContext';
@@ -32,6 +32,10 @@ export default function ProductPage() {
   const [activeTab, setActiveTab] = useState('description');
   const [openDropdown, setOpenDropdown] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+
+  // Max 6 videos per product, always in upload order.
+  const productVideos = (product?.videos || []).slice(0, 6);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -157,6 +161,60 @@ export default function ProductPage() {
           {/* Left Column: Images (Sticky) */}
           <div ref={mainImageRef} className={`w-full lg:w-5/12 lg:sticky lg:top-32 self-start flex flex-col gap-4 relative ${isFullscreen ? 'z-[100000]' : 'z-40'}`}>
             <ImageZoomViewer images={product.images || [product.image]} onFullscreenChange={setIsFullscreen} />
+
+            {productVideos.length > 0 && (
+              <div className="w-full bg-white rounded-2xl border border-charcoal/5 p-3">
+                <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-charcoal/60" />
+                    <h3 className="text-sm font-semibold text-charcoal">Product Videos</h3>
+                  </div>
+                  <span className="text-[10px] font-sans text-charcoal/40">
+                    {productVideos.length}/6
+                  </span>
+                </div>
+
+                {/* Mobile: continuous right-to-left auto slider */}
+                <div className="lg:hidden relative overflow-hidden -mx-1 px-1">
+                  <div
+                    className="flex gap-3 w-max animate-video-marquee will-change-transform"
+                    style={{
+                      animationDuration: `${Math.max(12, productVideos.length * 6)}s`,
+                      animationPlayState: videoPlaying ? 'paused' : 'running',
+                    }}
+                  >
+                    {[...productVideos, ...productVideos].map((video, idx) => (
+                      <div key={`mobile-video-${idx}`} className="shrink-0 w-[78vw] max-w-[320px]">
+                        <video
+                          src={video}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          onPlay={() => setVideoPlaying(true)}
+                          onPause={() => setVideoPlaying(false)}
+                          onEnded={() => setVideoPlaying(false)}
+                          className="w-full h-52 rounded-xl bg-black object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Desktop: stacked list */}
+                <div className="hidden lg:block space-y-3">
+                  {productVideos.map((video, idx) => (
+                    <video
+                      key={`product-video-${idx}`}
+                      src={video}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="w-full rounded-xl bg-black max-h-[420px] object-contain"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column: Details (Scrollable) */}
@@ -179,10 +237,18 @@ export default function ProductPage() {
                   ₹{Number(currentComparePrice).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </span>
               )}
-              <div className="flex items-center gap-2 border-l border-gray-300 pl-4 ml-2">
+              <button
+                type="button"
+                onClick={() => document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="flex items-center gap-2 border-l border-gray-300 pl-4 ml-2 hover:opacity-80 transition-opacity"
+                aria-label="See customer reviews"
+              >
+                <span className="text-sm font-semibold text-charcoal">{(Number(product.rating) || 0).toFixed(1)}</span>
                 <StarRating value={product.rating} />
-                <span className="text-sm text-gray-500 font-medium">({product.reviewsCount || 0} reviews)</span>
-              </div>
+                <span className="text-sm text-gray-500 font-medium">
+                  ({product.reviewsCount || 0} {Number(product.reviewsCount) === 1 ? 'review' : 'reviews'})
+                </span>
+              </button>
             </div>
 
             <div className="flex items-center gap-2 mb-8">
@@ -449,37 +515,22 @@ export default function ProductPage() {
               </div>
             </div>
 
-            {/* Why You'll Love It */}
-            <div className="mt-8 bg-cream/50 p-6 rounded-2xl border border-charcoal/5">
-              <h3 className="font-serif text-xl text-charcoal mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-pink-primary" /> Why You'll Love It
-              </h3>
-              <ul className="space-y-3">
-                {product.highlights && product.highlights.length > 0 ? (
-                  product.highlights.map((highlight, index) => (
+            {/* Why You'll Love It — sirf tab dikhta hai jab product me highlights hon */}
+            {product.highlights && product.highlights.length > 0 && (
+              <div className="mt-8 bg-cream/50 p-6 rounded-2xl border border-charcoal/5">
+                <h3 className="font-serif text-xl text-charcoal mb-4 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-pink-primary" /> Why You'll Love It
+                </h3>
+                <ul className="space-y-3">
+                  {product.highlights.map((highlight, index) => (
                     <li key={index} className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
                       <span className="text-sm font-sans text-gray-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: highlight }} />
                     </li>
-                  ))
-                ) : (
-                  <>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
-                      <span className="text-sm font-sans text-gray-600 leading-relaxed"><strong>Hand-finished edges</strong> for a perfect, weighted drape that hangs beautifully right out of the box.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
-                      <span className="text-sm font-sans text-gray-600 leading-relaxed"><strong>Fade-resistant</strong> premium yarns designed to withstand years of direct sunlight.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
-                      <span className="text-sm font-sans text-gray-600 leading-relaxed"><strong>Oeko-Tex® Certified</strong> meaning it's free of harmful chemicals and safe for your family.</span>
-                    </li>
-                  </>
-                )}
-              </ul>
-            </div>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Accordion Tabs */}
             <div className="mt-8 border-t border-charcoal/10">
@@ -517,9 +568,9 @@ export default function ProductPage() {
                                 <div className="mt-8">
                                   <div className="flex flex-col gap-1 sm:gap-2">
                                     {product.specificationTable.map((row, idx) => (
-                                      <div key={idx} className="flex flex-col sm:flex-row p-4 sm:p-5 rounded-2xl hover:bg-pink-50/40 transition-colors duration-300 group">
-                                        <div className="w-full sm:w-1/3 font-semibold text-charcoal/80 text-sm font-sans mb-1 sm:mb-0 group-hover:text-charcoal transition-colors tracking-wide">{row.name}</div>
-                                        <div className="w-full sm:w-2/3 text-gray-600 text-sm leading-relaxed font-sans group-hover:text-gray-900 transition-colors">{row.value}</div>
+                                      <div key={idx} className="flex flex-row items-start gap-3 p-3 sm:p-5 rounded-2xl hover:bg-pink-50/40 transition-colors duration-300 group">
+                                        <div className="w-1/3 shrink-0 font-semibold text-charcoal/80 text-xs sm:text-sm font-sans group-hover:text-charcoal transition-colors tracking-wide break-words">{row.name}</div>
+                                        <div className="w-2/3 min-w-0 text-gray-600 text-xs sm:text-sm leading-relaxed font-sans group-hover:text-gray-900 transition-colors break-words">{row.value}</div>
                                       </div>
                                     ))}
                                   </div>
@@ -547,7 +598,7 @@ export default function ProductPage() {
       </div>
 
       {/* Product Reviews */}
-      <div className="max-w-7xl mx-auto px-6 md:px-10">
+      <div id="reviews" className="max-w-7xl mx-auto px-6 md:px-10 scroll-mt-40">
         <ProductReviews productId={product.id} />
       </div>
 

@@ -106,7 +106,7 @@ export default function AdminLayout() {
         { name: 'Tax Rules', href: '/settings/taxes', icon: Percent },
         { name: 'Shipping Zones', href: '/settings/shipping', icon: Truck },
         { name: 'Users & Roles', href: '/settings/users', icon: Shield },
-        { name: 'Audit Logs', href: '/settings/audit-logs', icon: History },
+        { name: 'Audit Logs', href: '/settings/audit-logs', icon: History, hidden: true },
       ]
     }
   ];
@@ -153,6 +153,7 @@ export default function AdminLayout() {
                       key={item.name}
                       to={item.href}
                       onClick={() => setSidebarOpen(false)}
+                      style={item.hidden ? { display: 'none' } : undefined}
                       className={clsx(
                         "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 relative",
                         isActive 

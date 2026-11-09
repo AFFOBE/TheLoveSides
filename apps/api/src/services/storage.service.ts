@@ -55,15 +55,18 @@ export const uploadService = multer({
   },
 });
 
-// Separate uploader for review media so photos/videos can go up to MAX_VIDEO_FILE_SIZE
-// without raising the limit for other (product/theme) uploads.
-export const reviewUploadService = multer({
+// Separate uploader for review/product media so photos/videos can go up to
+// MAX_VIDEO_FILE_SIZE without raising the limit for other (theme) uploads.
+export const mediaUploadService = multer({
   storage,
   fileFilter,
   limits: {
     fileSize: env.MAX_VIDEO_FILE_SIZE,
   },
 });
+
+// Kept as an alias so the existing review upload route keeps working.
+export const reviewUploadService = mediaUploadService;
 
 /**
  * Utility function to convert an uploaded file path to a public URL.

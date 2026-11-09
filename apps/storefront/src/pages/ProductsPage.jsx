@@ -82,7 +82,13 @@ export default function ProductsPage() {
   };
 
   const applyPriceFilter = () => {
-    updateParams({ minPrice: priceInput.min, maxPrice: priceInput.max });
+    let { min, max } = priceInput;
+    // If the user typed the range backwards, fix it automatically.
+    if (min !== '' && max !== '' && Number(min) > Number(max)) {
+      [min, max] = [max, min];
+      setPriceInput({ min, max });
+    }
+    updateParams({ minPrice: min, maxPrice: max });
   };
 
   const { collections, loading: collectionsLoading } = useCollections();
@@ -102,6 +108,10 @@ export default function ProductsPage() {
   if (minPrice) query.minPrice = minPrice;
   if (maxPrice) query.maxPrice = maxPrice;
   if (inStock) query.inStock = 'true';
+  // The API returns at most `limit` products. Fetching the full catalogue (it
+  // is ~0.5 MB for 126 products) lets Low→High / High→Low sorting work across
+  // every product instead of only the first 100.
+  query.limit = 500;
 
   const { products, loading: productsLoading } = useProducts(query);
 
@@ -150,6 +160,7 @@ export default function ProductsPage() {
                 placeholder="Min"
                 value={priceInput.min}
                 onChange={(e) => setPriceInput(p => ({ ...p, min: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') applyPriceFilter(); }}
                 className="w-full pl-7 pr-3 py-2 border border-charcoal/20 rounded text-sm focus:outline-none focus:border-pink-primary"
               />
             </div>
@@ -161,6 +172,7 @@ export default function ProductsPage() {
                 placeholder="Max"
                 value={priceInput.max}
                 onChange={(e) => setPriceInput(p => ({ ...p, max: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') applyPriceFilter(); }}
                 className="w-full pl-7 pr-3 py-2 border border-charcoal/20 rounded text-sm focus:outline-none focus:border-pink-primary"
               />
             </div>
@@ -225,8 +237,9 @@ export default function ProductsPage() {
               .filter(sub => {
                 if (!selectedCategory) return true;
                 const cat = categories.find(c => c.slug === selectedCategory);
-                if (cat && sub.categoryIds && sub.categoryIds.includes(cat._id)) return true;
-                return false;
+                if (!cat) return true;
+                const ids = (sub.categoryIds || []).map(String);
+                return ids.includes(String(cat._id));
               })
               .map(subcategory => (
               <button

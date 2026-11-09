@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { Search } from 'lucide-react';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function AuditLogsList() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchLogs();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchLogs = async () => {
     try {
-      const { data } = await api.get('/admin/audit-logs'); 
+      const { data } = await api.get('/admin/audit-logs', {
+        params: { search: searchTerm || undefined }
+      });
       setLogs(data.data?.data || data.data || []);
     } catch (error) {
       console.error('Failed to fetch audit logs', error);
@@ -27,6 +34,14 @@ export default function AuditLogsList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-serif font-bold text-charcoal">Audit Logs</h1>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search logs by action or resource..."
+        />
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">

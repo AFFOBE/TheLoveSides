@@ -4,6 +4,10 @@ import { Order } from '../../models/Order.js';
 import { sendSuccess, sendPaginated } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
 /**
  * List customers (admin) with pagination and search.
  */
@@ -16,13 +20,20 @@ export async function listCustomers(req: Request, res: Response, next: NextFunct
     const query: Record<string, unknown> = { deletedAt: null };
 
     if (req.query.search) {
-      const search = req.query.search as string;
-      query.$or = [
-        { email: { $regex: search, $options: 'i' } },
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-      ];
+      const tokens = String(req.query.search).trim().split(/\s+/).filter(Boolean);
+      // Each token must match at least one field, so "gk thakur" finds the
+      // customer whose firstName is "gk" and lastName is "thakur".
+      query.$and = tokens.map((t) => {
+        const regex = new RegExp(escapeRegex(t), 'i');
+        return {
+          $or: [
+            { email: regex },
+            { firstName: regex },
+            { lastName: regex },
+            { phone: regex },
+          ],
+        };
+      });
     }
 
     if (req.query.isActive !== undefined) {
@@ -38,6 +49,30 @@ export async function listCustomers(req: Request, res: Response, next: NextFunct
         .lean(),
       User.countDocuments(query),
     ]);
+
+    // Phone fallback: guest checkout users often have no phone on their
+    // account — take it from their most recent order's shipping address.
+    const userIds = customers.map((c) => c._id);
+    if (userIds.length > 0) {
+      const recentOrders = await Order.find({ userId: { $in: userIds } })
+        .sort({ createdAt: -1 })
+        .select('userId shippingAddress.phone')
+        .lean();
+      const phoneByUser = new Map<string, string>();
+      for (const o of recentOrders) {
+        const uid = String(o.userId);
+        const phone = (o.shippingAddress as { phone?: string } | undefined)?.phone;
+        if (!phoneByUser.has(uid) && phone) {
+          phoneByUser.set(uid, phone);
+        }
+      }
+      for (const c of customers) {
+        if (!c.phone) {
+          const fallback = phoneByUser.get(String(c._id));
+          if (fallback) (c as { phone?: string }).phone = fallback;
+        }
+      }
+    }
 
     sendPaginated(res, customers, {
       page,

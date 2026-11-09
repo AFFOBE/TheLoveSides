@@ -1,9 +1,126 @@
 import type { Request, Response, NextFunction } from 'express';
 import { Product } from '../../models/Product.js';
 import { ProductVariant } from '../../models/ProductVariant.js';
+import { Review } from '../../models/Review.js';
 import { sendSuccess, sendPaginated } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 import mongoose from 'mongoose';
+
+type RatingStats = {
+  averageRating: number;
+  reviewsCount: number;
+  breakdown: Record<string, number>;
+};
+
+// Aggregates approved reviews for the given products so the storefront always
+// shows the real, live rating/review count instead of any static value.
+async function getRatingStatsMap(productIds: any[]): Promise<Map<string, RatingStats>> {
+  const map = new Map<string, RatingStats>();
+  if (!productIds || productIds.length === 0) return map;
+
+  const ids = productIds
+    .map((id) => {
+      try {
+        return new mongoose.Types.ObjectId(String(id));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  if (ids.length === 0) return map;
+
+  const stats = await Review.aggregate([
+    { $match: { productId: { $in: ids }, status: 'approved' } },
+    {
+      $group: {
+        _id: '$productId',
+        average: { $avg: '$rating' },
+        count: { $sum: 1 },
+        ratings: { $push: '$rating' },
+      },
+    },
+  ]);
+
+  for (const stat of stats) {
+    const breakdown: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    (stat.ratings as number[]).forEach((rating) => {
+      const key = String(Math.round(rating));
+      breakdown[key] = (breakdown[key] || 0) + 1;
+    });
+
+    map.set(String(stat._id), {
+      averageRating: Math.round(stat.average * 10) / 10,
+      reviewsCount: stat.count,
+      breakdown,
+    });
+  }
+
+  return map;
+}
+
+function attachRating<T extends Record<string, any>>(product: T, stats?: RatingStats) {
+  return {
+    ...product,
+    averageRating: stats?.averageRating ?? 0,
+    reviewsCount: stats?.reviewsCount ?? 0,
+  };
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
+// Builds a case-insensitive, plural-tolerant regex from a search token so that
+// "curtains" matches "Curtain", "blinds" matches "Blind", "drapes" matches
+// "Drape", etc. Users rarely type the exact singular/plural form stored in the
+// catalog, so this keeps search results intuitive.
+function buildTokenRegex(token: string): RegExp {
+  let pattern = escapeRegex(token);
+  if (/ies$/i.test(pattern)) {
+    pattern = pattern.replace(/ies$/i, '(?:y|ies?)');
+  } else if (/es$/i.test(pattern)) {
+    pattern = pattern.replace(/es$/i, 'e?s?');
+  } else if (/s$/i.test(pattern)) {
+    pattern = pattern.replace(/s$/i, 's?');
+  }
+  return new RegExp(pattern, 'i');
+}
+
+// Builds one $or condition per search token. Each token can match a product's
+// name / tags / short description / attribute values (e.g. a color) or a
+// related entity (room/collection/category/subcategory) name, so users can
+// search freely with any combination like "yellow curtains". Matching related
+// entities is what lets a query like "living room blue" work even though the
+// product itself doesn't contain those words.
+async function buildTokenConditions(tokens: string[]): Promise<any[]> {
+  return Promise.all(
+    tokens.map(async (token) => {
+      const regex = buildTokenRegex(token);
+
+      const [rooms, collections, categories, subCategories] = await Promise.all([
+        mongoose.model('Room').find({ name: regex }).select('_id').lean(),
+        mongoose.model('Collection').find({ name: regex }).select('_id').lean(),
+        mongoose.model('Category').find({ name: regex }).select('_id').lean(),
+        mongoose.model('SubCategory').find({ name: regex }).select('_id').lean(),
+      ]);
+
+      const orConditions: any[] = [
+        { name: regex },
+        { tags: regex },
+        { shortDescription: regex },
+        { 'attributes.values': regex },
+      ];
+
+      if (rooms.length) orConditions.push({ roomIds: { $in: rooms.map((r: any) => r._id) } });
+      if (collections.length) orConditions.push({ collectionIds: { $in: collections.map((c: any) => c._id) } });
+      if (categories.length) orConditions.push({ categoryIds: { $in: categories.map((c: any) => c._id) } });
+      if (subCategories.length) orConditions.push({ subCategoryIds: { $in: subCategories.map((c: any) => c._id) } });
+
+      return { $or: orConditions };
+    }),
+  );
+}
 
 export async function listProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -23,43 +140,13 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
       const tokens = qStr
         .trim()
         .split(/\s+/)
-        .filter((t) => t.length > 0)
-        .map((t) => t.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'));
+        .filter((t) => t.length > 0);
 
-      const productConditions: any[] = [];
-      if (tokens.length > 1) {
-        tokens.forEach((t) => {
-          const regex = new RegExp(t, 'i');
-          productConditions.push({
-            $or: [
-              { name: regex },
-              { tags: regex },
-              { shortDescription: regex },
-              { 'attributes.values': regex },
-            ],
-          });
-        });
-        query.$and = productConditions;
-      } else {
-        const regex = new RegExp(tokens[0], 'i');
-        const orConditions: any[] = [
-          { name: regex },
-          { tags: regex },
-          { shortDescription: regex },
-          { 'attributes.values': regex },
-        ];
-        // Add related entity matches
-        const [rooms, collections, categories, subCategories] = await Promise.all([
-          mongoose.model('Room').find({ name: regex }).select('_id').lean(),
-          mongoose.model('Collection').find({ name: regex }).select('_id').lean(),
-          mongoose.model('Category').find({ name: regex }).select('_id').lean(),
-          mongoose.model('SubCategory').find({ name: regex }).select('_id').lean(),
-        ]);
-        if (rooms.length) orConditions.push({ roomIds: { $in: rooms.map((r: any) => r._id) } });
-        if (collections.length) orConditions.push({ collectionIds: { $in: collections.map((c: any) => c._id) } });
-        if (categories.length) orConditions.push({ categoryIds: { $in: categories.map((c: any) => c._id) } });
-        if (subCategories.length) orConditions.push({ subCategoryIds: { $in: subCategories.map((c: any) => c._id) } });
-        query.$or = orConditions;
+      if (tokens.length === 1) {
+        const [condition] = await buildTokenConditions(tokens);
+        query.$or = condition.$or;
+      } else if (tokens.length > 1) {
+        query.$and = await buildTokenConditions(tokens);
       }
     }
 
@@ -69,6 +156,12 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     
     if (req.query.bestseller === 'true') {
       query.isBestSeller = true;
+    }
+
+    // New Arrivals: same behaviour as Best Sellers — only products the admin
+    // explicitly marked as "New Arrival" are returned.
+    if (req.query.newArrival === 'true') {
+      query.isNewArrival = true;
     }
 
     if (req.query.room) {
@@ -130,13 +223,10 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     // Pre-filter by variant properties (price and stock)
     if (minPrice !== undefined || maxPrice !== undefined || inStock) {
       const variantMatch: any = { isActive: true, deletedAt: null };
-      
-      if (minPrice !== undefined || maxPrice !== undefined) {
-        variantMatch.price = {};
-        if (minPrice !== undefined && !isNaN(minPrice)) variantMatch.price.$gte = minPrice;
-        if (maxPrice !== undefined && !isNaN(maxPrice)) variantMatch.price.$lte = maxPrice;
-      }
-      
+
+      if (minPrice !== undefined && !isNaN(minPrice)) variantMatch.price = { ...(variantMatch.price || {}), $gte: minPrice };
+      if (maxPrice !== undefined && !isNaN(maxPrice)) variantMatch.price = { ...(variantMatch.price || {}), $lte: maxPrice };
+
       if (inStock) {
         const inStockPipeline: any[] = [
           { $match: variantMatch },
@@ -165,8 +255,24 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
         const matchingProductIds = await mongoose.model('ProductVariant').aggregate(inStockPipeline);
         query._id = { $in: matchingProductIds.map(doc => doc._id) };
       } else {
-        const matchingVariants = await mongoose.model('ProductVariant').find(variantMatch).select('productId').lean();
-        query._id = { $in: matchingVariants.map((v: any) => v.productId) };
+        // Price filter must match the price the customer actually sees on the
+        // card (the cheapest active variant), otherwise filtering 2000-3000
+        // would return products displayed at ₹849 just because one large-size
+        // variant happens to fall in that range.
+        const pricePipeline: any[] = [
+          { $match: { isActive: true, deletedAt: null } },
+          { $group: { _id: '$productId', minPrice: { $min: '$price' } } },
+        ];
+
+        if (minPrice !== undefined || maxPrice !== undefined) {
+          const priceMatch: any = {};
+          if (minPrice !== undefined && !isNaN(minPrice)) priceMatch.$gte = minPrice;
+          if (maxPrice !== undefined && !isNaN(maxPrice)) priceMatch.$lte = maxPrice;
+          pricePipeline.push({ $match: { minPrice: priceMatch } });
+        }
+
+        const matchingVariants = await mongoose.model('ProductVariant').aggregate(pricePipeline);
+        query._id = { $in: matchingVariants.map((v: any) => v._id) };
       }
     }
 
@@ -198,17 +304,25 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     ]);
 
     const productIds = products.map((p: any) => p._id);
-    const variants = await ProductVariant.find({
-      productId: { $in: productIds },
-      isActive: true,
-      deletedAt: null,
-    }).lean();
+    const [variants, ratingMap] = await Promise.all([
+      ProductVariant.find({
+        productId: { $in: productIds },
+        isActive: true,
+        deletedAt: null,
+      }).sort({ price: 1 }).lean(),
+      getRatingStatsMap(productIds),
+    ]);
 
-    // Map variants back to products
-    const productsWithVariants = products.map((product: any) => ({
-      ...product,
-      variants: variants.filter((v: any) => v.productId?.toString() === product._id?.toString()),
-    }));
+    // Map variants + live rating stats back to products
+    const productsWithVariants = products.map((product: any) =>
+      attachRating(
+        {
+          ...product,
+          variants: variants.filter((v: any) => v.productId?.toString() === product._id?.toString()),
+        },
+        ratingMap.get(String(product._id)),
+      ),
+    );
 
     sendPaginated(res, productsWithVariants, {
       page,
@@ -316,13 +430,25 @@ export async function getProductBySlug(req: Request, res: Response, next: NextFu
       throw ApiError.notFound('Product');
     }
 
-    const variants = await ProductVariant.find({
-      productId: product._id,
-      isActive: true,
-      deletedAt: null,
-    }).lean();
+    const [variants, ratingMap] = await Promise.all([
+      ProductVariant.find({
+        productId: product._id,
+        isActive: true,
+        deletedAt: null,
+      }).lean(),
+      getRatingStatsMap([product._id]),
+    ]);
 
-    sendSuccess({ res, data: { ...product, variants } });
+    const stats = ratingMap.get(String(product._id));
+
+    sendSuccess({
+      res,
+      data: {
+        ...attachRating(product, stats),
+        variants,
+        ratingBreakdown: stats?.breakdown ?? { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -340,51 +466,25 @@ export async function searchProducts(req: Request, res: Response, next: NextFunc
     const tokens = qStr
       .trim()
       .split(/\s+/)
-      .filter((t) => t.length > 0)
-      .map((t) => t.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'));
+      .filter((t) => t.length > 0);
 
     let query: any;
     if (tokens.length > 1) {
-      const andConditions: any[] = [];
-      tokens.forEach((t) => {
-        const regex = new RegExp(t, 'i');
-        andConditions.push({
-          $or: [
-            { name: regex },
-            { tags: regex },
-            { shortDescription: regex },
-            { 'attributes.values': regex },
-          ],
-        });
-      });
       query = {
         status: 'published',
         deletedAt: null,
-        $and: andConditions,
+        $and: await buildTokenConditions(tokens),
+      };
+    } else if (tokens.length === 1) {
+      const [condition] = await buildTokenConditions(tokens);
+      query = {
+        status: 'published',
+        deletedAt: null,
+        $or: condition.$or,
       };
     } else {
-      const regex = new RegExp(tokens[0], 'i');
-      const orConditions: any[] = [
-        { name: regex },
-        { tags: regex },
-        { shortDescription: regex },
-        { 'attributes.values': regex },
-      ];
-      const [rooms, collections, categories, subCategories] = await Promise.all([
-        mongoose.model('Room').find({ name: regex }).select('_id').lean(),
-        mongoose.model('Collection').find({ name: regex }).select('_id').lean(),
-        mongoose.model('Category').find({ name: regex }).select('_id').lean(),
-        mongoose.model('SubCategory').find({ name: regex }).select('_id').lean(),
-      ]);
-      if (rooms.length) orConditions.push({ roomIds: { $in: rooms.map((r: any) => r._id) } });
-      if (collections.length) orConditions.push({ collectionIds: { $in: collections.map((c: any) => c._id) } });
-      if (categories.length) orConditions.push({ categoryIds: { $in: categories.map((c: any) => c._id) } });
-      if (subCategories.length) orConditions.push({ subCategoryIds: { $in: subCategories.map((c: any) => c._id) } });
-      query = {
-        status: 'published',
-        deletedAt: null,
-        $or: orConditions,
-      };
+      sendSuccess({ res, data: [] });
+      return;
     }
 
     const products = await Product.find(query)
@@ -393,16 +493,24 @@ export async function searchProducts(req: Request, res: Response, next: NextFunc
       .lean();
 
     const productIds = products.map((p: any) => p._id);
-    const variants = await ProductVariant.find({
-      productId: { $in: productIds },
-      isActive: true,
-      deletedAt: null,
-    }).lean();
+    const [variants, ratingMap] = await Promise.all([
+      ProductVariant.find({
+        productId: { $in: productIds },
+        isActive: true,
+        deletedAt: null,
+      }).sort({ price: 1 }).lean(),
+      getRatingStatsMap(productIds),
+    ]);
 
-    const productsWithVariants = products.map((product: any) => ({
-      ...product,
-      variants: variants.filter((v: any) => v.productId?.toString() === product._id?.toString()),
-    }));
+    const productsWithVariants = products.map((product: any) =>
+      attachRating(
+        {
+          ...product,
+          variants: variants.filter((v: any) => v.productId?.toString() === product._id?.toString()),
+        },
+        ratingMap.get(String(product._id)),
+      ),
+    );
 
     sendSuccess({ res, data: productsWithVariants });
   } catch (error) {

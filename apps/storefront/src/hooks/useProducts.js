@@ -1,6 +1,33 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 
+/**
+ * Maps the raw catalogue API product shape to the shape used by
+ * ProductCard / the rest of the storefront.
+ */
+export function formatProduct(p) {
+  return {
+    id: p._id, // backend _id is a string
+    slug: p.slug,
+    name: p.name,
+    price: p.variants?.[0]?.price || 0,
+    image: p.images?.[0] || p.variants?.[0]?.images?.[0] || 'https://via.placeholder.com/400x500',
+    images: p.images?.length > 0 ? p.images : (p.variants?.[0]?.images || []),
+    rating: p.averageRating || 0,
+    reviewsCount: p.reviewsCount || 0,
+    isNewArrival: !!p.isNewArrival,
+    isBestSeller: !!p.isBestSeller,
+    isFeatured: !!p.isFeatured,
+    category: p.category?.slug,
+    description: p.description,
+    highlights: p.highlights || [],
+    specifications: p.specifications || '',
+    specificationTable: p.specificationTable || [],
+    attributes: p.attributes || [],
+    variants: p.variants || [],
+  };
+}
+
 export function useProducts(query = {}) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -14,25 +41,7 @@ export function useProducts(query = {}) {
         const { data } = await api.get('/catalog/products', { params: { limit: 100, ...query } });
         if (active) {
           // Transform backend data to match frontend's expected ProductCard schema
-          const formatted = (data || []).map(p => ({
-            id: p._id, // backend _id is a string
-            slug: p.slug,
-            name: p.name,
-            price: p.variants?.[0]?.price || 0,
-            image: p.images?.[0] || p.variants?.[0]?.images?.[0] || 'https://via.placeholder.com/400x500',
-            images: p.images?.length > 0 ? p.images : (p.variants?.[0]?.images || []),
-            rating: p.averageRating || 0,
-            isNewArrival: !!p.isFeatured,
-            isBestSeller: !!p.isBestSeller, 
-            isFeatured: !!p.isFeatured, 
-            category: p.category?.slug,
-            description: p.description,
-            highlights: p.highlights || [],
-            specifications: p.specifications || '',
-            specificationTable: p.specificationTable || [],
-            attributes: p.attributes || [],
-            variants: p.variants || [],
-          }));
+          const formatted = (data || []).map(formatProduct);
           if (query.sort === 'price_asc') {
             formatted.sort((a, b) => (a.price || 0) - (b.price || 0));
           } else if (query.sort === 'price_desc') {
@@ -75,8 +84,11 @@ export function useProduct(identifier) {
             price: p.variants?.[0]?.price || 0,
             image: p.images?.[0] || p.variants?.[0]?.images?.[0] || 'https://via.placeholder.com/400x500',
             images: p.images?.length > 0 ? p.images : (p.variants?.[0]?.images?.length > 0 ? p.variants[0].images : ['https://via.placeholder.com/400x500', 'https://via.placeholder.com/400x500', 'https://via.placeholder.com/400x500', 'https://via.placeholder.com/400x500']),
+            videos: p.videos || [],
             rating: p.averageRating || 0,
-            isNewArrival: !!p.isFeatured,
+            reviewsCount: p.reviewsCount || 0,
+            ratingBreakdown: p.ratingBreakdown || { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
+            isNewArrival: !!p.isNewArrival,
             isBestSeller: !!p.isBestSeller, 
             isFeatured: !!p.isFeatured, 
             category: p.category?.slug,

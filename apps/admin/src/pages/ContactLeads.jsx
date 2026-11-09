@@ -2,23 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Eye, Trash2, CheckCircle, Clock, Search, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
+import SearchBar from '../components/ui/SearchBar';
 
 export default function ContactLeads() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 });
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState(null);
 
   useEffect(() => {
-    fetchLeads();
-  }, [pagination.page, statusFilter]);
+    const timer = setTimeout(() => {
+      fetchLeads();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [pagination.page, statusFilter, searchTerm]);
 
   const fetchLeads = async () => {
     setLoading(true);
     try {
       const { data } = await api.get('/admin/leads', {
-        params: { page: pagination.page, limit: pagination.limit, status: statusFilter }
+        params: { page: pagination.page, limit: pagination.limit, status: statusFilter, search: searchTerm || undefined }
       });
       setLeads(data.data.leads);
       setPagination(data.data.pagination);
@@ -59,7 +64,12 @@ export default function ContactLeads() {
           <h1 className="text-2xl font-serif font-bold text-gray-900">Contact Leads</h1>
           <p className="text-sm text-gray-500 mt-1">Manage inquiries and messages from customers.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <SearchBar
+            value={searchTerm}
+            onChange={(v) => { setSearchTerm(v); setPagination(p => ({ ...p, page: 1 })); }}
+            placeholder="Search by name, email, phone, or subject..."
+          />
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
@@ -108,6 +118,7 @@ export default function ContactLeads() {
                     <td className="px-6 py-4" onClick={() => setSelectedLead(lead)}>
                       <div className="font-medium text-gray-900">{lead.name}</div>
                       <div className="text-gray-500 text-xs mt-0.5">{lead.email}</div>
+                      {lead.phone && <div className="text-gray-500 text-xs mt-0.5">{lead.phone}</div>}
                     </td>
                     <td className="px-6 py-4 max-w-xs truncate" onClick={() => setSelectedLead(lead)}>
                       {lead.subject || <span className="text-gray-400 italic">No subject</span>}
@@ -182,6 +193,9 @@ export default function ContactLeads() {
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">From</label>
                   <p className="text-gray-900 font-medium">{selectedLead.name}</p>
                   <a href={`mailto:${selectedLead.email}`} className="text-brand-accent text-sm hover:underline">{selectedLead.email}</a>
+                  {selectedLead.phone && (
+                    <a href={`tel:${selectedLead.phone}`} className="block text-brand-accent text-sm hover:underline mt-0.5">{selectedLead.phone}</a>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Date Received</label>

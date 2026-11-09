@@ -38,12 +38,14 @@ export async function initiateCheckout(req: Request, res: Response, next: NextFu
           email,
           firstName: shippingAddress?.firstName || 'Guest',
           lastName: shippingAddress?.lastName || 'User',
+          phone: shippingAddress?.phone || undefined,
           role: customerRole?._id,
         });
       } else {
-        // If user exists but is missing names, update them
+        // If user exists but is missing names or phone, update them
         if (!user.firstName && shippingAddress?.firstName) user.firstName = shippingAddress.firstName;
         if (!user.lastName && shippingAddress?.lastName) user.lastName = shippingAddress.lastName;
+        if (!user.phone && shippingAddress?.phone) user.phone = shippingAddress.phone;
         await user.save();
       }
       userId = user.id;
@@ -58,6 +60,10 @@ export async function initiateCheckout(req: Request, res: Response, next: NextFu
         }
         if (!user.lastName && shippingAddress?.lastName) {
           user.lastName = shippingAddress.lastName;
+          updated = true;
+        }
+        if (!user.phone && shippingAddress?.phone) {
+          user.phone = shippingAddress.phone;
           updated = true;
         }
         if (updated) await user.save();

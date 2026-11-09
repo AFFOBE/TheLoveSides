@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { CartProvider } from './context/CartContext';
 import { FlyToCartProvider } from './context/FlyToCartContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -10,6 +10,7 @@ import Footer from './components/layout/Footer';
 import ScrollToTop from './components/layout/ScrollToTop';
 import WhatsAppButton from './components/layout/WhatsAppButton';
 import InitialLoader from './components/layout/InitialLoader';
+import GoogleAnalytics from './components/GoogleAnalytics';
 
 // Lazy load pages for code splitting
 const Home = lazy(() => import('./pages/Home'));
@@ -26,6 +27,7 @@ const CmsPage = lazy(() => import('./pages/CmsPage'));
 const TrackPage = lazy(() => import('./pages/TrackPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 // A simple loading fallback
 const PageLoader = () => (
@@ -37,6 +39,14 @@ const PageLoader = () => (
   </div>
 );
 
+// Offsets the content below the fixed header because the Back row is only
+// rendered on inner pages (the home page has no Back row).
+const PageTopSpacer = () => {
+  const { pathname } = useLocation();
+  if (pathname === '/') return null;
+  return <div className="h-10" aria-hidden="true" />;
+};
+
 function App() {
   return (
     <ThemeProvider>
@@ -47,9 +57,11 @@ function App() {
           <InitialLoader>
           <BrowserRouter>
             <ScrollToTop />
+            <GoogleAnalytics />
             <div className="flex flex-col min-h-screen">
               <Navbar />
             <main className="flex-grow">
+              <PageTopSpacer />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   <Route path="/" element={<Home />} />
@@ -68,6 +80,7 @@ function App() {
                   <Route path="/about" element={<AboutPage />} />
                   <Route path="/contact" element={<ContactPage />} />
                   <Route path="/pages/:slug" element={<CmsPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
                 </Routes>
               </Suspense>
             </main>

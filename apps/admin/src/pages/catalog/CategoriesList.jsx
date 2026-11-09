@@ -5,14 +5,21 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTableRow } from '../../components/SortableTableRow';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function CategoriesList() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchCategories();
   }, []);
+
+  const q = searchTerm.trim().toLowerCase();
+  const filtered = q
+    ? categories.filter(c => (c.name || '').toLowerCase().includes(q) || (c.slug || '').toLowerCase().includes(q))
+    : categories;
 
   const fetchCategories = async () => {
     try {
@@ -86,6 +93,10 @@ export default function CategoriesList() {
         </Link>
       </div>
 
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search categories by name or slug..." />
+      </div>
+
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -100,9 +111,9 @@ export default function CategoriesList() {
               </tr>
             </thead>
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={categories.map(r => r._id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={filtered.map(r => r._id)} strategy={verticalListSortingStrategy}>
                 <tbody>
-                  {categories.map((category) => (
+                  {filtered.map((category) => (
                     <SortableTableRow key={category._id} id={category._id} className="border-b border-charcoal/5 hover:bg-ivory/50 bg-white">
                   <td className="p-4">
                     <img 
@@ -143,7 +154,7 @@ export default function CategoriesList() {
                   </td>
                 </SortableTableRow>
               ))}
-              {categories.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td colSpan="6" className="p-8 text-center text-charcoal/50 text-sm">
                     No Categories found. Start by adding one!

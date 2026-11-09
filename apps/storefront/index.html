@@ -7,8 +7,31 @@
     <title>TheLoveSides | E-Commerce Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://www.instagram.com">
+    <link rel="preconnect" href="https://www.instagram.com" crossorigin>
+    <link rel="dns-prefetch" href="https://scontent.cdninstagram.com">
+    <link rel="preconnect" href="https://scontent.cdninstagram.com" crossorigin>
+    <link rel="dns-prefetch" href="https://static.cdninstagram.com">
+    <link rel="preconnect" href="https://static.cdninstagram.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script defer src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <!-- Google tag (gtag.js) — GA4 -->
+    <link rel="preconnect" href="https://www.googletagmanager.com">
+    <script>
+      // Keep local development hits out of the live GA reports.
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        window['ga-disable-G-E18DYY2W9E'] = true;
+      }
+    </script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-E18DYY2W9E"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-E18DYY2W9E');
+    </script>
   </head>
   <body>
     <div id="root"></div>

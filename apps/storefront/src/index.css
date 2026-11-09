@@ -50,3 +50,45 @@
   background: #fff !important;
   border: 0 !important;
 }
+
+/* Mobile menu: visible slim scrollbar so users know there are more links below */
+.mobile-menu-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #FE7DBD rgba(0, 0, 0, 0.05);
+  overscroll-behavior: contain;
+}
+.mobile-menu-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.mobile-menu-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 9999px;
+}
+.mobile-menu-scroll::-webkit-scrollbar-thumb {
+  background: #FE7DBD;
+  border-radius: 9999px;
+}
+.mobile-menu-scroll::-webkit-scrollbar-thumb:hover {
+  background: #e56aa6;
+}
+
+/* Product videos: continuous right-to-left marquee on mobile.
+   The track renders the list twice, so -50% (- half a gap) loops seamlessly. */
+@keyframes video-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-50% - 6px));
+  }
+}
+.animate-video-marquee {
+  animation-name: video-marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-video-marquee {
+    animation: none;
+  }
+}

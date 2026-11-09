@@ -4,6 +4,7 @@ import { connectDatabase, disconnectDatabase } from './config/index.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import { logger } from './utils/logger.js';
 import './workers/shipping.worker.js'; // Start background workers
+import { startPaymentReminderJob } from './workers/payment-reminder.worker.js';
 
 let server: import('http').Server;
 
@@ -18,7 +19,10 @@ async function bootstrap() {
       logger.info(`🚀 API Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
     });
 
-    // 3. Graceful shutdown handlers
+    // 3. Background jobs (safe to run after the DB connection is ready)
+    startPaymentReminderJob();
+
+    // 4. Graceful shutdown handlers
     const shutdown = async (signal: string) => {
       logger.info(`Received ${signal}, shutting down gracefully...`);
       

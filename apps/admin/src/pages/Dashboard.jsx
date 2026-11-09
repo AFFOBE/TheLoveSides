@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { ShoppingBag, DollarSign, Package, AlertTriangle, ArrowUpRight, TrendingUp, Users, Activity, Loader2, MessageSquare, Star, Ticket } from 'lucide-react';
+import { ShoppingBag, DollarSign, Package, AlertTriangle, ArrowUpRight, TrendingUp, Users, Activity, Loader2, MessageSquare, Star, Ticket, Clock, Phone } from 'lucide-react';
 import {
   AreaChart,
   Area,
@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({
     totalSales: 0,
     totalOrders: 0,
+    pendingOrders: 0,
     activeProducts: 0,
     lowStock: 0,
     recentOrders: [],
@@ -31,7 +32,8 @@ export default function Dashboard() {
     const fetchStats = async () => {
       try {
         const [statsRes, ordersRes, productsRes, custRes, leadsRes, reviewsRes, couponsRes] = await Promise.allSettled([
-          api.get('/admin/dashboard/stats?period=7d'),
+          api.get('/admin/dashboard/stats?period=all'),
+          // No status filter — pending orders must show up here too.
           api.get('/admin/orders?limit=6'),
           api.get('/admin/catalog/products?limit=1000'), // Get more products to check stock
           api.get('/admin/customers?limit=1'),
@@ -55,6 +57,7 @@ export default function Dashboard() {
         setStats({
           totalSales: dashboardData.revenue || 0,
           totalOrders: dashboardData.totalOrders || 0,
+          pendingOrders: dashboardData.pendingOrders || 0,
           activeProducts: activeProducts,
           lowStock: lowStockCount,
           recentOrders: orders,
@@ -79,7 +82,7 @@ export default function Dashboard() {
       name: 'Total Revenue', 
       value: `₹${stats.totalSales.toLocaleString()}`, 
       icon: DollarSign, 
-      trend: '7 days', 
+      trend: 'All time', 
       trendUp: true,
       color: 'text-indigo-600', 
       bg: 'bg-indigo-50/80', 
@@ -90,12 +93,24 @@ export default function Dashboard() {
       name: 'Total Orders', 
       value: stats.totalOrders, 
       icon: ShoppingBag, 
-      trend: '7 days',
+      trend: 'Paid orders',
       trendUp: true,
       color: 'text-emerald-600', 
       bg: 'bg-emerald-50/80', 
       border: 'border-emerald-100',
       glow: 'shadow-emerald-500/10'
+    },
+    { 
+      name: 'Pending Orders', 
+      value: stats.pendingOrders, 
+      icon: Clock, 
+      trend: 'Awaiting payment',
+      trendUp: false,
+      color: 'text-amber-600', 
+      bg: 'bg-amber-50/80', 
+      border: 'border-amber-100',
+      glow: 'shadow-amber-500/10',
+      to: '/orders?status=PENDING_PAYMENT'
     },
     { 
       name: 'Active Products', 
@@ -142,7 +157,7 @@ export default function Dashboard() {
             <Link to="/orders" className="inline-flex items-center justify-center rounded-xl border border-gray-200/80 bg-white/50 backdrop-blur-md px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 hover:shadow focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all">
                Manage Orders
             </Link>
-            <Link to="/catalog/products/new" className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-indigo-600/20 hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-600/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all">
+            <Link to="/products/new" className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-md shadow-indigo-600/20 hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-600/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all">
               <Package className="w-4 h-4 mr-2" />
               Add Product
             </Link>
@@ -150,27 +165,37 @@ export default function Dashboard() {
       </div>
 
       {/* Stat Cards - Premium Glassmorphism Look */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statCards.map((stat) => (
-          <div key={stat.name} className={`relative overflow-hidden bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-lg ${stat.glow} border border-white/60 group hover:-translate-y-1 transition-all duration-300`}>
-            <div className="flex items-center justify-between mb-5">
-              <div className={`p-3 rounded-2xl ${stat.bg} ${stat.border} border shadow-inner`}>
-                <stat.icon className={`w-6 h-6 ${stat.color}`} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        {statCards.map((stat) => {
+          const card = (
+            <div className={`relative overflow-hidden bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-lg ${stat.glow} border border-white/60 group hover:-translate-y-1 transition-all duration-300`}>
+              <div className="flex items-center justify-between mb-5">
+                <div className={`p-3 rounded-2xl ${stat.bg} ${stat.border} border shadow-inner`}>
+                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                </div>
+                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full shadow-sm ${stat.trendUp ? 'bg-green-50/90 text-green-700 border border-green-100' : 'bg-red-50/90 text-red-700 border border-red-100'}`}>
+                  {stat.trendUp ? <TrendingUp className="w-3.5 h-3.5" /> : <Activity className="w-3.5 h-3.5" />}
+                  {stat.trend}
+                </span>
               </div>
-              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full shadow-sm ${stat.trendUp ? 'bg-green-50/90 text-green-700 border border-green-100' : 'bg-red-50/90 text-red-700 border border-red-100'}`}>
-                {stat.trendUp ? <TrendingUp className="w-3.5 h-3.5" /> : <Activity className="w-3.5 h-3.5" />}
-                {stat.trend}
-              </span>
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-1">{stat.name}</p>
+                <h3 className="text-3xl font-bold text-gray-900 tracking-tight">{stat.value}</h3>
+              </div>
+              
+              {/* Decorative background element */}
+              <div className={`absolute -right-8 -bottom-8 w-32 h-32 ${stat.bg} rounded-full opacity-60 group-hover:scale-[1.8] transition-transform duration-700 ease-out blur-3xl -z-10`}></div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500 mb-1">{stat.name}</p>
-              <h3 className="text-3xl font-bold text-gray-900 tracking-tight">{stat.value}</h3>
-            </div>
-            
-            {/* Decorative background element */}
-            <div className={`absolute -right-8 -bottom-8 w-32 h-32 ${stat.bg} rounded-full opacity-60 group-hover:scale-[1.8] transition-transform duration-700 ease-out blur-3xl -z-10`}></div>
-          </div>
-        ))}
+          );
+
+          return stat.to ? (
+            <Link key={stat.name} to={stat.to} className="block focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 rounded-3xl">
+              {card}
+            </Link>
+          ) : (
+            <div key={stat.name}>{card}</div>
+          );
+        })}
       </div>
 
       {/* Charts & Secondary Stats Area */}
@@ -181,7 +206,7 @@ export default function Dashboard() {
           <div className="px-7 py-6 flex items-center justify-between relative z-10">
             <div>
                 <h2 className="text-xl font-bold text-gray-900 tracking-tight">Revenue Overview</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Sales performance over the last 7 days</p>
+                <p className="text-sm text-gray-500 mt-0.5">Daily revenue from paid orders — all time</p>
             </div>
           </div>
           <div className="px-6 pb-6 pt-2 flex-1 min-h-[320px] relative z-10">
@@ -202,7 +227,7 @@ export default function Dashboard() {
                     dy={12}
                     tickFormatter={(dateStr) => {
                       const d = new Date(dateStr);
-                      return isNaN(d) ? dateStr : d.toLocaleDateString(undefined, { weekday: 'short' });
+                      return isNaN(d) ? dateStr : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
                     }}
                   />
                   <YAxis 
@@ -238,8 +263,8 @@ export default function Dashboard() {
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
                  <Activity className="w-12 h-12 mb-3 text-gray-300" />
-                 <p className="font-medium text-gray-500">No revenue data for the past 7 days</p>
-                 <p className="text-sm mt-1">Orders will appear here once they are placed.</p>
+                  <p className="font-medium text-gray-500">No revenue data yet</p>
+                  <p className="text-sm mt-1">Paid orders will appear here once they are placed.</p>
               </div>
             )}
           </div>
@@ -349,20 +374,30 @@ export default function Dashboard() {
                   <td className="px-7 py-5 whitespace-nowrap text-sm font-medium text-gray-500">{new Date(order.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</td>
                   <td className="px-7 py-5 whitespace-nowrap">
                     <div className="flex items-center">
-                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 border border-white shadow-sm flex items-center justify-center text-sm font-bold text-gray-700 mr-3">
+                      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 border border-white shadow-sm flex items-center justify-center text-sm font-bold text-gray-700 mr-3">
                             {(order.shippingAddress?.fullName || 'G')[0].toUpperCase()}
                         </div>
-                        <span className="text-sm font-bold text-gray-900">{order.shippingAddress?.fullName || 'Guest User'}</span>
+                        <div>
+                          <span className="text-sm font-bold text-gray-900 block">{order.shippingAddress?.fullName || 'Guest User'}</span>
+                          {order.shippingAddress?.phone && (
+                            <a href={`tel:${order.shippingAddress.phone}`} className="text-xs font-medium text-gray-500 hover:text-indigo-600 transition-colors inline-flex items-center gap-1">
+                              <Phone className="w-3 h-3" />
+                              {order.shippingAddress.phone}
+                            </a>
+                          )}
+                        </div>
                     </div>
                   </td>
                   <td className="px-7 py-5 whitespace-nowrap">
                     <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold border shadow-sm
                       ${order.status === 'PAID' || order.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : 
                         order.status === 'PENDING_PAYMENT' ? 'bg-amber-50 text-amber-700 border-amber-200/60' : 
+                        order.status === 'CANCELLED' || order.status === 'PAYMENT_FAILED' ? 'bg-rose-50 text-rose-700 border-rose-200/60' : 
                         'bg-blue-50 text-blue-700 border-blue-200/60'}`}>
-                      {order.status.replace('_', ' ')}
+                      {order.status.replace(/_/g, ' ')}
                     </span>
                   </td>
+
                   <td className="px-7 py-5 whitespace-nowrap text-sm font-black text-gray-900 text-right">₹{order.grandTotal.toLocaleString()}</td>
                 </tr>
               ))}

@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { Upload, Trash2, Link as LinkIcon, FileImage } from 'lucide-react';
+import SearchBar from '../../components/ui/SearchBar';
 
 export default function MediaList() {
   const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchMedia();
   }, []);
+
+  const q = searchTerm.trim().toLowerCase();
+  const filtered = q
+    ? media.filter(m => (m.originalFilename || '').toLowerCase().includes(q) || (m.alt || '').toLowerCase().includes(q))
+    : media;
 
   const fetchMedia = async () => {
     try {
@@ -87,11 +94,15 @@ export default function MediaList() {
         </div>
       </div>
 
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+        <SearchBar value={searchTerm} onChange={setSearchTerm} placeholder="Search media by filename..." />
+      </div>
+
       {loading ? (
         <div className="animate-pulse text-charcoal/50 p-8 text-center bg-white rounded-2xl">Loading media...</div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {media.map((item) => (
+          {filtered.map((item) => (
             <div key={item._id} className="bg-white rounded-xl shadow-sm border border-charcoal/5 overflow-hidden group">
               <div className="aspect-square bg-ivory/50 flex items-center justify-center relative overflow-hidden">
                 {item.mimetype?.startsWith('image/') ? (
@@ -114,7 +125,7 @@ export default function MediaList() {
               </div>
             </div>
           ))}
-          {media.length === 0 && (
+          {filtered.length === 0 && (
             <div className="col-span-full py-12 text-center text-charcoal/50 bg-white rounded-2xl border border-charcoal/5 border-dashed">
               No media found. Upload some images to get started.
             </div>

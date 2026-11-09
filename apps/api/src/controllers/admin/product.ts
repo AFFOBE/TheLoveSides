@@ -7,10 +7,15 @@ import { sendSuccess, sendPaginated } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { generateUniqueSKU } from '../../utils/skuGenerator.js';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
 export async function createProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
   let createdProductId: any = null;
   let createdVariantIds: any[] = [];
   try {
+    // Yahan productData ke andar frontend se isNewArrival: true/false aa raha hai
     const { variants, ...productData } = req.body;
 
     let slug = productData.slug;
@@ -36,17 +41,12 @@ export async function createProduct(req: Request, res: Response, next: NextFunct
       while (await ProductVariant.exists({ sku: uniqueSku })) {
         uniqueSku = generateUniqueSKU(prefix);
       }
-      variantsToCreate.push({
-        ...v,
-        sku: uniqueSku, // Auto-generated pro SKU overriding frontend
-        productId: product._id,
-      });
+      variantsToCreate.push({ ...v, sku: uniqueSku, productId: product._id });
     }
 
     const createdVariants = await ProductVariant.insertMany(variantsToCreate);
     createdVariantIds = createdVariants.map((v: any) => v._id);
 
-    // Create inventory ledger for each variant
     const inventoryDocs = createdVariants.map((v: any, index: number) => {
       const variantInput = variants[index];
       return {
@@ -63,21 +63,15 @@ export async function createProduct(req: Request, res: Response, next: NextFunct
     sendSuccess({ res, statusCode: 201, data: product, message: 'Product created successfully' });
   } catch (error: any) {
     console.error('CREATE PRODUCT ERROR:', error);
-
-    // Manual rollback
-    if (createdProductId) {
-      await Product.deleteOne({ _id: createdProductId }).catch(e => console.error('Rollback failed for Product:', e));
-    }
+    if (createdProductId) await Product.deleteOne({ _id: createdProductId }).catch(e => console.error(e));
     if (createdVariantIds.length > 0) {
-      await ProductVariant.deleteMany({ _id: { $in: createdVariantIds } }).catch(e => console.error('Rollback failed for Variants:', e));
-      await Inventory.deleteMany({ variantId: { $in: createdVariantIds } }).catch(e => console.error('Rollback failed for Inventory:', e));
+      await ProductVariant.deleteMany({ _id: { $in: createdVariantIds } }).catch(e => console.error(e));
+      await Inventory.deleteMany({ variantId: { $in: createdVariantIds } }).catch(e => console.error(e));
     }
-
     if (error.code === 11000 || error.name === 'MongoBulkWriteError') {
-      next(ApiError.conflict('A product or variant with this SKU already exists. SKU must be unique.'));
+      next(ApiError.conflict('A product or variant with this SKU already exists.'));
       return;
     }
-
     next(error);
   }
 }
@@ -98,10 +92,15 @@ export async function updateProduct(req: Request, res: Response, next: NextFunct
       req.body.slug = slug;
     }
 
-    // We omit variants update from this endpoint for safety. Variants should be managed individually or via a dedicated endpoint.
     const { variants, ...updateData } = req.body;
 
-    const product = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
+    // Yahan maine { returnDocument: 'after' } add kiya hai taaki false values bhi update hon
+    const product = await Product.findByIdAndUpdate(id, updateData, { 
+      new: true, 
+      runValidators: true,
+      returnDocument: 'after' 
+    });
+    
     if (!product) {
       throw ApiError.notFound('Product');
     }
@@ -118,71 +117,47 @@ export async function updateProductVariants(req: Request, res: Response, next: N
     const { variants } = req.body;
 
     const product = await Product.findById(productId);
-    if (!product) {
-      throw ApiError.notFound('Product');
-    }
+    if (!product) throw ApiError.notFound('Product');
 
     const existingVariants = await ProductVariant.find({ productId, deletedAt: null });
     const existingIds = existingVariants.map(v => v._id.toString());
     const payloadIds = variants.filter((v: any) => v._id).map((v: any) => v._id);
 
-    // 1. Soft-delete missing variants
     const idsToDelete = existingIds.filter(id => !payloadIds.includes(id));
     if (idsToDelete.length > 0) {
       for (const delId of idsToDelete) {
         const variantToDel = existingVariants.find(v => v._id.toString() === delId);
         if (variantToDel) {
           await ProductVariant.findByIdAndUpdate(delId, {
-            isActive: false,
-            deletedAt: new Date(),
-            sku: `${variantToDel.sku}-del-${Date.now()}`
+            isActive: false, deletedAt: new Date(), sku: `${variantToDel.sku}-del-${Date.now()}`
           });
         }
       }
     }
 
-    // 2. Update existing variants & their inventory
     const variantsToUpdate = variants.filter((v: any) => v._id);
     for (const vData of variantsToUpdate) {
       await ProductVariant.findByIdAndUpdate(vData._id, vData);
       if (vData.inventory) {
         await Inventory.findOneAndUpdate(
           { variantId: vData._id },
-          {
-            available: vData.inventory.available,
-            lowStockThreshold: vData.inventory.lowStockThreshold || 5,
-            trackInventory: vData.inventory.trackInventory ?? true,
-          }
+          { available: vData.inventory.available, lowStockThreshold: vData.inventory.lowStockThreshold || 5, trackInventory: vData.inventory.trackInventory ?? true }
         );
       }
     }
 
-    // 3. Create new variants & their inventory
-    const variantsToCreate = variants.filter((v: any) => !v._id).map((v: any) => ({
-      ...v,
-      productId,
-    }));
-
+    const variantsToCreate = variants.filter((v: any) => !v._id).map((v: any) => ({ ...v, productId }));
     if (variantsToCreate.length > 0) {
       const prefix = product.skuPrefix || 'TLS';
-      // Ensure SKUs are unique and auto-generated
       for (const v of variantsToCreate) {
         let uniqueSku = generateUniqueSKU(prefix);
-        while (await ProductVariant.exists({ sku: uniqueSku })) {
-          uniqueSku = generateUniqueSKU(prefix);
-        }
-        v.sku = uniqueSku; // Override frontend with pro generated SKU
+        while (await ProductVariant.exists({ sku: uniqueSku })) uniqueSku = generateUniqueSKU(prefix);
+        v.sku = uniqueSku;
       }
-
       const created = await ProductVariant.insertMany(variantsToCreate);
       const inventoryDocs = created.map((v: any, index: number) => {
         const vInput = variantsToCreate[index];
-        return {
-          variantId: v._id,
-          available: vInput.inventory?.available || 0,
-          lowStockThreshold: vInput.inventory?.lowStockThreshold || 5,
-          trackInventory: vInput.inventory?.trackInventory ?? true,
-        };
+        return { variantId: v._id, available: vInput.inventory?.available || 0, lowStockThreshold: vInput.inventory?.lowStockThreshold || 5, trackInventory: vInput.inventory?.trackInventory ?? true };
       });
       await Inventory.insertMany(inventoryDocs);
     }
@@ -193,10 +168,6 @@ export async function updateProductVariants(req: Request, res: Response, next: N
   }
 }
 
-
-/**
- * List all products (admin) — includes drafts, archived, etc.
- */
 export async function listProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -204,66 +175,69 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     const skip = (page - 1) * limit;
 
     const query: Record<string, unknown> = { deletedAt: null };
-
     if (req.query.status) query.status = req.query.status;
     if (req.query.room) query.roomIds = new mongoose.Types.ObjectId(req.query.room as string);
     if (req.query.category) query.categoryIds = new mongoose.Types.ObjectId(req.query.category as string);
     if (req.query.subcategory) query.subCategoryIds = new mongoose.Types.ObjectId(req.query.subcategory as string);
+    
     if (req.query.search) {
-      query.$text = { $search: req.query.search as string };
+      const s = String(req.query.search).trim();
+      if (s) {
+        if (mongoose.Types.ObjectId.isValid(s) && s.length === 24) {
+          query._id = new mongoose.Types.ObjectId(s);
+        } else {
+          const tokens = s.split(/\s+/).filter(Boolean);
+          if (tokens.length === 1) {
+            const regex = new RegExp(escapeRegex(tokens[0]), 'i');
+            query.$or = [{ name: regex }, { slug: regex }];
+            const primaryCount = await Product.countDocuments(query);
+            if (primaryCount === 0) {
+              const skuProductIds = await ProductVariant.find({ sku: regex, deletedAt: null }).distinct('productId');
+              delete query.$or;
+              query._id = { $in: skuProductIds };
+            }
+          } else {
+            query.$and = await Promise.all(
+              tokens.map(async (t) => {
+                const regex = new RegExp(escapeRegex(t), 'i');
+                const skuProductIds = await ProductVariant.find({ sku: regex, deletedAt: null }).distinct('productId');
+                return { $or: [{ name: regex }, { slug: regex }, { tags: regex }, { brand: regex }, { _id: { $in: skuProductIds } }] };
+              })
+            );
+          }
+        }
+      }
     }
 
     const [products, total] = await Promise.all([
-      Product.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .populate('roomIds', 'name slug')
-        .populate('categoryIds', 'name slug')
-        .lean(),
+      Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).populate('roomIds', 'name slug').populate('categoryIds', 'name slug').lean(),
       Product.countDocuments(query),
     ]);
 
-    // Fetch variants and inventory for all products in the page
     const productIds = products.map(p => p._id);
     const variants = await ProductVariant.find({ productId: { $in: productIds }, deletedAt: null }).lean();
-
     const variantIds = variants.map(v => v._id);
     const inventories = await Inventory.find({ variantId: { $in: variantIds } }).lean();
-
     const inventoryMap = new Map(inventories.map(inv => [inv.variantId.toString(), inv]));
 
     const variantsByProduct = new Map();
     for (const v of variants) {
       const pId = v.productId.toString();
       if (!variantsByProduct.has(pId)) variantsByProduct.set(pId, []);
-      variantsByProduct.get(pId).push({
-        ...v,
-        inventory: inventoryMap.get(v._id.toString()) || null
-      });
+      variantsByProduct.get(pId).push({ ...v, inventory: inventoryMap.get(v._id.toString()) || null });
     }
 
-    const productsWithVariants = products.map(p => ({
-      ...p,
-      variants: variantsByProduct.get(p._id.toString()) || []
-    }));
+    const productsWithVariants = products.map(p => ({ ...p, variants: variantsByProduct.get(p._id.toString()) || [] }));
 
     sendPaginated(res, productsWithVariants, {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-      hasNextPage: page * limit < total,
-      hasPreviousPage: page > 1,
+      page, limit, total, totalPages: Math.ceil(total / limit),
+      hasNextPage: page * limit < total, hasPreviousPage: page > 1,
     });
   } catch (error) {
     next(error);
   }
 }
 
-/**
- * Get unique colors used in product attributes across all products.
- */
 export async function getUniqueColors(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await Product.aggregate([
@@ -275,50 +249,23 @@ export async function getUniqueColors(_req: Request, res: Response, next: NextFu
       { $sort: { _id: 1 } },
       { $project: { _id: 0, color: "$_id" } }
     ]);
-    const colors = result.map(r => r.color).filter(Boolean);
-    sendSuccess({ res, data: colors });
+    sendSuccess({ res, data: result.map(r => r.color).filter(Boolean) });
   } catch (error) {
     next(error);
   }
 }
 
-/**
- * Get single product by ID (admin) — includes variants and inventory.
- */
 export async function getProductById(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
+    const product = await Product.findOne({ _id: id, deletedAt: null }).populate('roomIds', 'name slug').populate('collectionIds', 'name slug').populate('categoryIds', 'name slug').populate('subCategoryIds', 'name slug').lean();
+    if (!product) throw ApiError.notFound('Product');
 
-    const product = await Product.findOne({ _id: id, deletedAt: null })
-      .populate('roomIds', 'name slug')
-      .populate('collectionIds', 'name slug')
-      .populate('categoryIds', 'name slug')
-      .populate('subCategoryIds', 'name slug')
-      .lean();
-
-    if (!product) {
-      throw ApiError.notFound('Product');
-    }
-
-    // Fetch variants with inventory data
-    const variants = await ProductVariant.find({
-      productId: product._id,
-      deletedAt: null,
-    }).lean();
-
+    const variants = await ProductVariant.find({ productId: product._id, deletedAt: null }).lean();
     const variantIds = variants.map((v) => v._id);
-    const inventories = await Inventory.find({
-      variantId: { $in: variantIds },
-    }).lean();
-
-    const inventoryMap = new Map(
-      inventories.map((inv) => [inv.variantId.toString(), inv]),
-    );
-
-    const variantsWithInventory = variants.map((v) => ({
-      ...v,
-      inventory: inventoryMap.get(v._id.toString()) || null,
-    }));
+    const inventories = await Inventory.find({ variantId: { $in: variantIds } }).lean();
+    const inventoryMap = new Map(inventories.map((inv) => [inv.variantId.toString(), inv]));
+    const variantsWithInventory = variants.map((v) => ({ ...v, inventory: inventoryMap.get(v._id.toString()) || null }));
 
     sendSuccess({ res, data: { ...product, variants: variantsWithInventory } });
   } catch (error) {
@@ -326,29 +273,12 @@ export async function getProductById(req: Request, res: Response, next: NextFunc
   }
 }
 
-/**
- * Soft-delete a product (admin).
- */
 export async function deleteProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
-
-    const product = await Product.findByIdAndUpdate(
-      id,
-      { deletedAt: new Date(), status: 'archived' },
-      { new: true },
-    );
-
-    if (!product) {
-      throw ApiError.notFound('Product');
-    }
-
-    // Also deactivate all variants
-    await ProductVariant.updateMany(
-      { productId: id },
-      { isActive: false, deletedAt: new Date() },
-    );
-
+    const product = await Product.findByIdAndUpdate(id, { deletedAt: new Date(), status: 'archived' }, { new: true });
+    if (!product) throw ApiError.notFound('Product');
+    await ProductVariant.updateMany({ productId: id }, { isActive: false, deletedAt: new Date() });
     sendSuccess({ res, message: 'Product archived successfully' });
   } catch (error) {
     next(error);

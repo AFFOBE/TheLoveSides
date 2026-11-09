@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import { Return } from '../../models/Return.js';
 import { Order } from '../../models/Order.js';
 import { User } from '../../models/User.js';
@@ -11,6 +12,10 @@ import { createAuditLog } from '../../services/audit.service.js';
 import { sendReturnStatusEmail } from '../../services/notification.service.js';
 import { logger } from '../../utils/logger.js';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
 export async function listReturns(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -19,6 +24,33 @@ export async function listReturns(req: Request, res: Response, next: NextFunctio
 
     const query: any = {};
     if (req.query.status) query.status = req.query.status;
+
+    if (req.query.search) {
+      const s = String(req.query.search).trim().replace(/^#/, '');
+      if (s) {
+        if (mongoose.Types.ObjectId.isValid(s) && s.length === 24) {
+          query._id = new mongoose.Types.ObjectId(s);
+        } else {
+          const tokens = s.split(/\s+/).filter(Boolean);
+          const perToken = await Promise.all(
+            tokens.map(async (t) => {
+              const regex = new RegExp(escapeRegex(t), 'i');
+              const [orders, users] = await Promise.all([
+                Order.find({ orderNumber: regex }).select('_id').lean(),
+                User.find({ $or: [{ email: regex }, { firstName: regex }, { lastName: regex }] }).select('_id').lean(),
+              ]);
+              return {
+                $or: [
+                  { orderId: { $in: orders.map((o: any) => o._id) } },
+                  { userId: { $in: users.map((u: any) => u._id) } },
+                ],
+              };
+            }),
+          );
+          query.$and = perToken;
+        }
+      }
+    }
 
     const [returns, total] = await Promise.all([
       Return.find(query)

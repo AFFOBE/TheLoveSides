@@ -107,10 +107,12 @@ async function processRazorpayEvent(event: any) {
           try {
             const user = await User.findById(order.userId);
             if (user?.email) {
-              await sendOrderConfirmationEmail(order.id, user.email);
+              sendOrderConfirmationEmail(order.id, user.email).catch((err) => {
+                logger.error({ err, orderId: order.id }, 'Order confirmation email errored');
+              });
             }
           } catch (err) {
-            logger.error({ err, orderId: order.id }, 'Error sending invoice email');
+            logger.error({ err, orderId: order.id }, 'Error queueing order confirmation email');
           }
         }
       }

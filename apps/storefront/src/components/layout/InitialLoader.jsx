@@ -7,6 +7,9 @@ export default function InitialLoader({ children }) {
   const { loading: themeLoading } = useTheme();
   const { isLoading: authLoading } = useAuth();
   const [networkIdle, setNetworkIdle] = useState(getActiveRequests() === 0);
+  // The splash should only run on the very first visit, never again on
+  // in-app (client side) page changes.
+  const [hasBooted, setHasBooted] = useState(false);
   
   useEffect(() => {
     const handleStart = () => setNetworkIdle(false);
@@ -29,18 +32,25 @@ export default function InitialLoader({ children }) {
   }, []);
   
   // Wait for both theme, auth, AND network idle
-  const isInitializing = themeLoading || authLoading || !networkIdle;
+  const isReady = !themeLoading && !authLoading && networkIdle;
+
+  // Once the site has finished its first load, lock the splash away for good.
+  useEffect(() => {
+    if (!hasBooted && isReady) setHasBooted(true);
+  }, [hasBooted, isReady]);
+
+  const isInitializing = !hasBooted && !isReady;
 
   return (
     <>
       <div 
-        className={`fixed inset-0 z-[9999] bg-cream dark:bg-charcoal flex flex-col items-center justify-center transition-all duration-1000 ${
+        className={`fixed inset-0 z-[9999] bg-[#fdecf4] flex flex-col items-center justify-center transition-all duration-1000 ${
           isInitializing ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'
         }`}
       >
         <div className="flex flex-col items-center animate-[pulse_3s_cubic-bezier(0.4,0,0.6,1)_infinite]">
           {/* Brand Logo / Name */}
-          <h1 className="text-3xl md:text-4xl font-serif text-charcoal dark:text-cream tracking-[0.25em] uppercase text-center font-medium">
+          <h1 className="text-3xl md:text-4xl font-serif text-charcoal tracking-[0.25em] uppercase text-center font-medium">
             The Love Sides
           </h1>
         </div>

@@ -80,8 +80,13 @@ export default function ProductCard({ product, layout = 'auto' }) {
             </Link>
             <div className="flex justify-between items-center mt-1 md:mt-2 gap-1">
               <span className="font-sans font-semibold text-sm md:text-lg text-charcoal shrink-0">₹{Number(product.price || product.variants?.[0]?.price || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-              <div className="scale-[0.6] sm:scale-75 md:scale-100 origin-right">
-                <StarRating value={product.rating} />
+              <div className="flex items-center gap-1 shrink-0">
+                <div className="scale-[0.6] sm:scale-75 md:scale-100 origin-right">
+                  <StarRating value={product.rating} />
+                </div>
+                <span className="text-[10px] md:text-xs font-sans text-charcoal/50 whitespace-nowrap">
+                  {product.reviewsCount > 0 ? `(${product.reviewsCount})` : 'No reviews'}
+                </span>
               </div>
             </div>
           </div>
@@ -171,8 +176,13 @@ export default function ProductCard({ product, layout = 'auto' }) {
           </Link>
           <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-3 sm:mb-6 gap-1 sm:gap-0">
             <span className="font-sans font-medium text-sm sm:text-lg text-charcoal">₹{Number(product.price || product.variants?.[0]?.price || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-            <div className="scale-[0.70] origin-left sm:scale-100 sm:origin-center">
-              <StarRating value={product.rating} />
+            <div className="flex items-center gap-1.5">
+              <div className="scale-[0.70] origin-left sm:scale-100 sm:origin-center">
+                <StarRating value={product.rating} />
+              </div>
+              <span className="text-[10px] sm:text-xs font-sans text-charcoal/50 whitespace-nowrap">
+                {product.reviewsCount > 0 ? `(${product.reviewsCount})` : 'No reviews'}
+              </span>
             </div>
           </div>
         </div>

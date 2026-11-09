@@ -5,20 +5,33 @@ import { ApiError } from '../../utils/ApiError.js';
 import { createAuditLog } from '../../services/audit.service.js';
 import { hashPassword } from '../../utils/password.js';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
 export async function listAdminUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 1000;
     const skip = (page - 1) * limit;
 
+    const query: any = {};
+    if (req.query.search) {
+      const s = String(req.query.search).trim();
+      if (s) {
+        const regex = new RegExp(escapeRegex(s), 'i');
+        query.$or = [{ email: regex }, { firstName: regex }, { lastName: regex }];
+      }
+    }
+
     const [users, total] = await Promise.all([
-      AdminUser.find()
+      AdminUser.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate('role', 'name')
         .lean(),
-      AdminUser.countDocuments(),
+      AdminUser.countDocuments(query),
     ]);
 
     sendPaginated(res, users, {

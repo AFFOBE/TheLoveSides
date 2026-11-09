@@ -1,8 +1,15 @@
 import type { Request, Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import { Review } from '../../models/Review.js';
+import { Product } from '../../models/Product.js';
+import { User } from '../../models/User.js';
 import { sendSuccess, sendPaginated } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { createAuditLog } from '../../services/audit.service.js';
+
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
 
 export async function listReviews(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -13,6 +20,35 @@ export async function listReviews(req: Request, res: Response, next: NextFunctio
     const query: any = {};
     if (req.query.status) query.status = req.query.status;
     if (req.query.productId) query.productId = req.query.productId;
+
+    if (req.query.search) {
+      const s = String(req.query.search).trim();
+      if (s) {
+        if (mongoose.Types.ObjectId.isValid(s) && s.length === 24) {
+          query._id = new mongoose.Types.ObjectId(s);
+        } else {
+          const tokens = s.split(/\s+/).filter(Boolean);
+          const perToken = await Promise.all(
+            tokens.map(async (t) => {
+              const regex = new RegExp(escapeRegex(t), 'i');
+              const [products, users] = await Promise.all([
+                Product.find({ name: regex }).select('_id').lean(),
+                User.find({ $or: [{ email: regex }, { firstName: regex }, { lastName: regex }] }).select('_id').lean(),
+              ]);
+              return {
+                $or: [
+                  { productId: { $in: products.map((p: any) => p._id) } },
+                  { userId: { $in: users.map((u: any) => u._id) } },
+                  { title: regex },
+                  { content: regex },
+                ],
+              };
+            }),
+          );
+          query.$and = perToken;
+        }
+      }
+    }
 
     const [reviews, total] = await Promise.all([
       Review.find(query)

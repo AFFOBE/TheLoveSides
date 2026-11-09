@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { Eye, Search } from 'lucide-react';
+import { Eye, Search, Download, Loader2 } from 'lucide-react';
+import { exportToCsv } from '../../lib/exportCsv';
 
 export default function CustomersList() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     // Basic debounce for search
@@ -30,13 +32,46 @@ export default function CustomersList() {
     }
   };
 
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      // Fetch the full (search-filtered) list, not just the current page.
+      const { data } = await api.get('/admin/customers', {
+        params: { search: searchTerm || undefined, limit: 10000 },
+      });
+      const rows = data.data?.data || data.data || [];
+      if (!rows.length) {
+        alert('No customers to export.');
+        return;
+      }
+      const date = new Date().toISOString().slice(0, 10);
+      exportToCsv(
+        `customers-${date}.csv`,
+        [
+          { label: 'Name', value: (r) => `${r.firstName || ''} ${r.lastName || ''}`.trim() },
+          { label: 'Email', value: 'email' },
+          { label: 'Phone', value: 'phone' },
+          { label: 'Status', value: (r) => (r.isActive ? 'Active' : 'Inactive') },
+          { label: 'Joined', value: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN') : '') },
+        ],
+        rows,
+      );
+    } catch (error) {
+      console.error('Failed to export customers', error);
+      alert('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-serif font-bold text-charcoal">Customers</h1>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex gap-4">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-charcoal/5 flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-md">
           <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-charcoal/40" />
           <input
@@ -47,6 +82,16 @@ export default function CustomersList() {
             className="w-full pl-10 pr-4 py-2 bg-ivory/50 border border-charcoal/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand text-sm"
           />
         </div>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting || loading}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          title="Export customers to CSV"
+        >
+          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {exporting ? 'Exporting...' : 'Export'}
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">

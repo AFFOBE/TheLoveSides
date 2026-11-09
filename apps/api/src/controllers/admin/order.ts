@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import { Order, type OrderStatus } from '../../models/Order.js';
+import { User } from '../../models/User.js';
 import { Payment } from '../../models/Payment.js';
 import { Shipment } from '../../models/Shipment.js';
 import { Return } from '../../models/Return.js';
@@ -9,6 +11,18 @@ import { generateInvoicePDF } from '../../services/invoice.service.js';
 import { createAuditLog } from '../../services/audit.service.js';
 import { sendSuccess, sendPaginated } from '../../utils/ApiResponse.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { logger } from '../../utils/logger.js';
+
+function escapeRegex(str: string): string {
+  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
+// Statuses where the payment went through successfully. Used for all
+// dashboard totals so unpaid/failed/refunded orders are never counted.
+export const PAID_STATUSES = [
+  'PAID', 'PROCESSING', 'READY_TO_SHIP', 'SHIPPED',
+  'OUT_FOR_DELIVERY', 'DELIVERED', 'RETURN_REQUESTED', 'RETURNED', 'RTO',
+] as const;
 
 /**
  * List all orders (admin) with filters and pagination.
@@ -22,8 +36,58 @@ export async function listOrders(req: Request, res: Response, next: NextFunction
     const query: Record<string, unknown> = {};
 
     if (req.query.status) query.status = req.query.status;
+    // Comma-separated list, e.g. statuses=PAID,PROCESSING,SHIPPED
+    if (req.query.statuses) {
+      const statuses = String(req.query.statuses).split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length > 0) query.status = { $in: statuses };
+    }
     if (req.query.userId) query.userId = req.query.userId;
     if (req.query.orderNumber) query.orderNumber = { $regex: req.query.orderNumber, $options: 'i' };
+
+    if (req.query.search) {
+      const s = String(req.query.search).trim().replace(/^#/, '');
+      if (s) {
+        // Date search: YYYY-MM-DD or DD/MM/YYYY → orders created that day
+        const isoDate = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        const dmyDate = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+        const parsedDate = isoDate
+          ? new Date(+isoDate[1], +isoDate[2] - 1, +isoDate[3])
+          : dmyDate
+            ? new Date(+dmyDate[3], +dmyDate[2] - 1, +dmyDate[1])
+            : null;
+
+        if (parsedDate && !isNaN(parsedDate.getTime())) {
+          const dayEnd = new Date(parsedDate);
+          dayEnd.setDate(dayEnd.getDate() + 1);
+          query.createdAt = { $gte: parsedDate, $lt: dayEnd };
+        } else if (mongoose.Types.ObjectId.isValid(s) && s.length === 24) {
+          query._id = new mongoose.Types.ObjectId(s);
+        } else {
+          const tokens = s.split(/\s+/).filter(Boolean);
+          // Every token must match the order number, the customer on the
+          // shipping address, or the linked customer account.
+          const perToken = await Promise.all(
+            tokens.map(async (t) => {
+              const regex = new RegExp(escapeRegex(t), 'i');
+              const users = await User.find({
+                $or: [{ email: regex }, { firstName: regex }, { lastName: regex }, { phone: regex }],
+              })
+                .select('_id')
+                .lean();
+              return {
+                $or: [
+                  { orderNumber: regex },
+                  { 'shippingAddress.fullName': regex },
+                  { 'shippingAddress.phone': regex },
+                  { userId: { $in: users.map((u: any) => u._id) } },
+                ],
+              };
+            }),
+          );
+          query.$and = perToken;
+        }
+      }
+    }
 
     // Date range filters
     if (req.query.from || req.query.to) {
@@ -37,7 +101,7 @@ export async function listOrders(req: Request, res: Response, next: NextFunction
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('userId', 'email firstName lastName')
+        .populate('userId', 'email firstName lastName phone')
         .lean(),
       Order.countDocuments(query),
     ]);
@@ -169,48 +233,51 @@ export async function addOrderNote(req: Request, res: Response, next: NextFuncti
 
 /**
  * Get dashboard stats (admin).
+ * Order/revenue totals are ALL-TIME and only count payment-successful
+ * orders. `period` only controls the daily revenue chart window
+ * (default: all time).
  */
 export async function getDashboardStats(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Determine date range from query
-    let fromDate = thirtyDaysAgo;
-    const period = req.query.period as string;
-    if (period === 'today') fromDate = todayStart;
-    else if (period === '7d') fromDate = sevenDaysAgo;
-    else if (period === '90d') fromDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    // Chart window from query (does NOT affect totals)
+    const period = (req.query.period as string) || 'all';
+    let chartDateFilter: Record<string, unknown> = {};
+    if (period === 'today') chartDateFilter = { createdAt: { $gte: todayStart } };
+    else if (period === '7d') chartDateFilter = { createdAt: { $gte: sevenDaysAgo } };
+    else if (period === '30d') chartDateFilter = { createdAt: { $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) } };
+    else if (period === '90d') chartDateFilter = { createdAt: { $gte: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000) } };
 
-    const dateFilter = { createdAt: { $gte: fromDate } };
+    const paidFilter = { status: { $in: [...PAID_STATUSES] } };
 
     const [
       totalOrders,
       pendingOrders,
-      paidOrders,
       cancelledOrders,
       revenueResult,
       todayOrders,
       revenueByDayResult
     ] = await Promise.all([
-      Order.countDocuments(dateFilter),
-      Order.countDocuments({ ...dateFilter, status: 'PENDING_PAYMENT' }),
-      Order.countDocuments({ ...dateFilter, status: { $in: ['PAID', 'PROCESSING', 'READY_TO_SHIP', 'SHIPPED', 'DELIVERED'] } }),
-      Order.countDocuments({ ...dateFilter, status: 'CANCELLED' }),
+      // All-time paid orders only
+      Order.countDocuments(paidFilter),
+      Order.countDocuments({ status: 'PENDING_PAYMENT' }),
+      Order.countDocuments({ status: 'CANCELLED' }),
+      // All-time revenue from payment-successful orders
       Order.aggregate([
-        { $match: { ...dateFilter, status: { $nin: ['CANCELLED', 'REFUNDED', 'PENDING_PAYMENT', 'PAYMENT_FAILED'] } } },
+        { $match: paidFilter },
         { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
       ]),
       Order.countDocuments({ createdAt: { $gte: todayStart } }),
       Order.aggregate([
-        { $match: { ...dateFilter, status: { $nin: ['CANCELLED', 'REFUNDED', 'PENDING_PAYMENT', 'PAYMENT_FAILED'] } } },
-        { 
-          $group: { 
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, 
-            revenue: { $sum: '$grandTotal' } 
-          } 
+        { $match: { ...paidFilter, ...chartDateFilter } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            revenue: { $sum: '$grandTotal' }
+          }
         },
         { $sort: { _id: 1 } }
       ])
@@ -231,7 +298,6 @@ export async function getDashboardStats(req: Request, res: Response, next: NextF
         period,
         totalOrders,
         pendingOrders,
-        paidOrders,
         cancelledOrders,
         revenue,
         averageOrderValue: aov,
@@ -282,17 +348,53 @@ export async function createShipment(req: Request, res: Response, next: NextFunc
 
     const shiprocketResponse = await createShiprocketOrder(order, user.email, defaultWeight);
 
+    // Auto-assign AWB if Shiprocket didn't return one (AWB is required for pickup/label/track)
+    let awbCode: string | null = shiprocketResponse.awb_code || null;
+    let courierName: string | null = shiprocketResponse.courier_name || null;
+    let courierId: number | undefined = shiprocketResponse.courier_company_id
+      ? parseInt(shiprocketResponse.courier_company_id)
+      : undefined;
+    let shipmentStatus: 'CREATED' | 'AWB_ASSIGNED' = awbCode ? 'AWB_ASSIGNED' : 'CREATED';
+    let awbErrorMessage: string | null = null;
+
+    if (!awbCode) {
+      try {
+        const { assignAwbSmart } = await import('../../integrations/shiprocket/shiprocket.service.js');
+        const awbResponse: any = await assignAwbSmart(shiprocketResponse.order_id, shiprocketResponse.shipment_id);
+        const assignedAwb = awbResponse?.awb_code || awbResponse?.data?.awb_code || null;
+        if (assignedAwb) {
+          awbCode = assignedAwb;
+          courierName = awbResponse?.courier_name || awbResponse?.data?.courier_name || courierName;
+          const assignedCourierId = awbResponse?.courier_company_id || awbResponse?.data?.courier_company_id;
+          if (assignedCourierId) {
+            courierId = parseInt(String(assignedCourierId));
+          }
+          shipmentStatus = 'AWB_ASSIGNED';
+        } else {
+          awbErrorMessage = awbResponse?.message || 'AWB not assigned';
+          logger.warn(
+            { orderId: order.id, message: awbErrorMessage },
+            'AWB not auto-assigned; can be retried from the order page'
+          );
+        }
+      } catch (awbError) {
+        awbErrorMessage = awbError instanceof Error ? awbError.message : 'AWB assignment failed';
+        logger.error(
+          { err: awbError, orderId: order.id },
+          'Auto AWB assignment failed; can be retried from the order page'
+        );
+      }
+    }
+
     // Save Shipment record
     await Shipment.create({
       orderId: order._id,
       shiprocketOrderId: shiprocketResponse.order_id.toString(),
       shiprocketShipmentId: shiprocketResponse.shipment_id.toString(),
-      status: 'CREATED',
-      awbCode: shiprocketResponse.awb_code || null,
-      courierName: shiprocketResponse.courier_name || null,
-      courierId: shiprocketResponse.courier_company_id
-        ? parseInt(shiprocketResponse.courier_company_id)
-        : undefined,
+      status: shipmentStatus,
+      awbCode,
+      courierName,
+      courierId,
     });
 
     if (order.status === 'PAID') {
@@ -312,7 +414,13 @@ export async function createShipment(req: Request, res: Response, next: NextFunc
       req,
     });
 
-    sendSuccess({ res, message: 'Shipment created successfully' });
+    sendSuccess({
+      res,
+      data: { awbCode, awbError: awbErrorMessage },
+      message: awbCode
+        ? 'Shipment created and AWB assigned successfully'
+        : `Shipment created, but AWB failed${awbErrorMessage ? `: ${awbErrorMessage}` : ' — use "Generate AWB"'}.`,
+    });
   } catch (error) {
     next(error);
   }
